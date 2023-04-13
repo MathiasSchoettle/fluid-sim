@@ -35,7 +35,4 @@ autom4te.cache
 /.vscode/
 auxx/missing
 auxx/depcomp
-auxx/depcomp
 auxx/install-sh
-auxx/missing
-auxx/depcomp
