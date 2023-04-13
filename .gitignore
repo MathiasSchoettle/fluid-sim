@@ -9,6 +9,8 @@ Makefile.in
 *.o
 *~
 
+/src/cg
+
 imgui.ini
 
 autom4te.cache
