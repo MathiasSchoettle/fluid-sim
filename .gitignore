@@ -9,6 +9,8 @@ Makefile.in
 *.o
 *~
 
+imgui.ini
+
 autom4te.cache
 /config.h
 /autoscan.log
