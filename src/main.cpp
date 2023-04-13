@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
 	shader_ptr sky_shader = make_shader("sky", "shaders/sky.vert", "shaders/sky.frag");
 	material_ptr sky_mat = make_material("sky");
 	sky_mat->k_diff = glm::vec4(.3,.3,1,1);
-	shared_ptr<Texture2D> sky_tex = make_texture("sky", "render-data/cgskies-0319-free.jpg", false);
+	shared_ptr<Texture2D> sky_tex = make_texture("sky", "render-data/sky.jpg", false);
 	sky_mat->add_texture("tex", sky_tex);
 	drawelement_ptr sky = make_drawelement("sky", sky_shader, sky_mat, light_rep[0]->meshes);
 

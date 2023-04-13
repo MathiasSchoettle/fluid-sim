@@ -33,3 +33,9 @@ autom4te.cache
 /stamp-h1
 
 /.vscode/
+auxx/missing
+auxx/depcomp
+auxx/depcomp
+auxx/install-sh
+auxx/missing
+auxx/depcomp
