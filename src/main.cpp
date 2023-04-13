@@ -74,7 +74,73 @@ int main(int argc, char** argv) {
 	TimerQueryGL render_timer("render");
 	TimerQueryGL render_sm_timer("render shadowmap");
 
+	// -- mine --
+
+	GLuint vao;
+	glGenVertexArrays(1, &vao);
+	glBindVertexArray(vao);
+
+	int amount = 100;
+
+	GLfloat vertices_position[amount * 3] = {0};
+
+	for (int i = 0; i < amount * 3; ++i) {
+		vertices_position[i] = (std::rand() % 200 - 50);
+	}
+
+	GLuint vbo;
+	glGenBuffers(1, &vbo);
+
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices_position), vertices_position, GL_STATIC_DRAW);
+
+	shader_ptr shader_points = make_shader("mine", "shaders/default.vert", "shaders/default.frag");
+
+	GLuint shader_id = shader_points.get()->id;
+	glEnable(GL_PROGRAM_POINT_SIZE);
+
+	GLint position_attribute = glGetAttribLocation(shader_id, "in_pos");
+	glVertexAttribPointer(position_attribute, 3, GL_FLOAT, GL_FALSE, 0, 0);
+	glEnableVertexAttribArray(position_attribute);
+
+	// -- mine --
+
 	while (Context::running() && game_is_running) {
+
+		glNamedBufferSubData(vbo, 0, sizeof(vertices_position), vertices_position);
+
+
+
+		for (int i = 0; i < amount * 3; ++i) {
+			for (int j = 0; j < amount * 3; ++j) {
+				if (j == i) continue;
+
+				glm::vec3 first(vertices_position[i], vertices_position[i+1], vertices_position[i+2]);
+				glm::vec3 secon(vertices_position[j], vertices_position[j+1], vertices_position[j+2]);
+
+				glm::vec3 to = first - secon;
+
+				float value = glm::length(to);
+				to = glm::normalize(to);
+
+				glm::vec3 f;
+
+				if (value <= 0) {
+					f = glm::vec3(0, 0, 0.5f);
+				}
+				else if (value > 6) {
+					f = secon + (to * 0.0001f);
+				}
+				else {
+					f = secon - (to * 0.1f);
+				}
+
+				vertices_position[j] =   f.x;
+				vertices_position[j+1] = f.y;
+				vertices_position[j+2] = f.z;
+			}
+			// vertices_position[i] = vertices_position[i] + (std::rand() % 200 - 100) / 100.0;
+		}
 
 		input_timer.start();
 		Camera::default_input_handler(Context::frame_time());
@@ -106,6 +172,7 @@ int main(int argc, char** argv) {
 		update_timer.end();
 
 		render_sm_timer.start();
+
 		auto render = [&](std::shared_ptr<Camera> cam) {
 			cam->make_current();
 			glClear(GL_DEPTH_BUFFER_BIT);
@@ -155,6 +222,13 @@ int main(int argc, char** argv) {
 			de->unbind();
 		}
 
+		shader_ptr shader = shader_points;
+		shader->bind();
+		shader->uniform("view", cam->view);
+		shader->uniform("proj", cam->proj);
+		glBindVertexArray(vao);
+		glDrawArrays(GL_POINTS, 0, amount);
+
 		glDisable(GL_CULL_FACE);
 		float n = Camera::current()->near;
 		float f = Camera::current()->far;
@@ -167,6 +241,9 @@ int main(int argc, char** argv) {
 		Camera::current()->near = n;
 		Camera::current()->far = f;
 		glEnable(GL_CULL_FACE);
+
+		
+
 
 		render_timer.end();
 

@@ -1,8 +1,15 @@
 #version 150
 
 out vec4 out_col;
-uniform vec4 cols[100];
 
 void main() {
-	out_col = cols[gl_PrimitiveID % 100];
+
+	vec2 circCoord = 2.0 * gl_PointCoord - 1.0;
+	if (dot(circCoord, circCoord) > 1.0) {
+		discard;
+	}
+
+	float v = dot(circCoord, circCoord);
+
+	out_col = vec4(0.7, 0.2, 0.4, 1.0);
 }
