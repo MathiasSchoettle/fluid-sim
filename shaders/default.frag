@@ -11,5 +11,11 @@ void main() {
 
 	float v = dot(circCoord, circCoord);
 
-	out_col = vec4(0.7, 0.2, 0.4, 1.0);
+	float x = (1 - gl_PointCoord.x);
+	float y = (1 - gl_PointCoord.y);
+
+
+
+	out_col = vec4(0.75);
+	out_col = vec4(1, 1, 1, 1) * x * y;
 }

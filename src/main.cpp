@@ -6,12 +6,123 @@
 #include <glm/gtc/random.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <algorithm>
+#include <random>
+#include <chrono>
+
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
 
 using namespace std;
+using namespace std::chrono;
 
 bool game_is_running = true;
+int amount = 4;
+int m = 16;
+int width = 1280, height = 720;
+float k = 100, k_near = 100, roh_0 = 1;
+
+int last;
+
+int particle_diameter = 10;
+
+void resize(int w, int h) {
+	width = w;
+	height = h;
+}
+
+void init(GLfloat* vertices_position, std::vector<glm::vec3> &positions) {
+
+	positions.clear();
+
+	for (int i = 0; i < amount; ++i) {
+		for (int j = 0; j < amount; ++j) {
+			for (int k = 0; k < amount; ++k) {
+				int index = i * amount * amount + j * amount + k;
+
+				float x = i * (particle_diameter - 4);
+				float y = j * (particle_diameter - 2);
+				float z = k * (particle_diameter - 3);
+
+				vertices_position[index * 3] = x;
+				vertices_position[index * 3 + 2] = y;
+				vertices_position[index * 3 + 1] = z;
+				positions.push_back(glm::vec3(x, y, z));
+			}
+		}
+	}
+}
+
+void update(GLfloat* vertices_position, std::vector<glm::vec3> &positions) {
+
+	std::vector<glm::vec3> old_posis(positions.size());
+
+	for (int i = 0; i < positions.size(); ++i) {
+		old_posis[i] = positions[i];
+	}
+
+	int ms = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+
+	float delta_t = ms - last;
+	last = ms;
+	delta_t /= 1000;
+	delta_t = delta_t * delta_t;
+
+	for (int i = 0; i < positions.size(); ++i) {
+		auto pos = positions[i];
+		float roh_i = 0;
+		float roh_near = 0;
+
+		for (int j = 0; j < positions.size(); ++j) {
+			if (j == i) continue;
+
+			auto other = positions[j];
+			auto r = pos - other;
+			auto distance = glm::length(r);
+
+			auto q = distance/particle_diameter;
+
+			if (q < 1) {
+				float t = (1 - q);
+				roh_i += t * t;
+				roh_near += t * t * t;
+			}	
+		}
+
+
+		float P_i = k * (roh_i - roh_0);
+		float P_near = k_near * roh_near;
+		glm::vec3 d_x = glm::vec3(0);
+
+		for (int j = 0; j < positions.size(); ++j) {
+			if (j == i) continue;
+
+			auto other = positions[j];
+			auto r = pos- other;
+			auto distance = glm::length(r);
+
+			auto q = distance/particle_diameter;
+
+			if (q < 1) {
+				float t = 1 - q;
+				glm::vec3 D = delta_t * (P_i * t + P_near * t * t) * r;
+				positions[j] = positions[j] + (D * 0.5f);
+
+
+				d_x = d_x - (D * 0.5f);
+			}
+		}
+
+		positions[i] = pos + d_x;
+	}
+
+	for (int i = 0; i < positions.size(); ++i) {
+		auto pos = positions[i];
+		vertices_position[i * 3] = pos.y;
+		vertices_position[i * 3 + 2] = pos.x;
+		vertices_position[i * 3 + 1] = pos.z;
+	}
+}
 
 int main(int argc, char** argv) {
 
@@ -24,8 +135,8 @@ int main(int argc, char** argv) {
 	Context::init(params);
 
 	auto cam = make_camera("cam");
-	cam->pos = glm::vec3(-270,131,-82);
-	cam->dir = glm::vec3(1,0,0);
+	cam->pos = glm::vec3(-80,202,-27);
+	cam->dir = glm::vec3(0.778490, -0.595482, 0.198381);
 	cam->up = glm::vec3(0,1,0);
 	cam->fix_up_vector = true;
 	cam->near = 1;
@@ -33,60 +144,14 @@ int main(int argc, char** argv) {
 	cam->make_current();
 	Camera::default_camera_movement_speed = 0.4;
 
-	auto shadow_cam = make_camera("shadowcam");
-	shadow_cam->perspective = false;
-	shadow_cam->fix_up_vector = false;
-	shadow_cam->up = glm::vec3(0,0,1);
-	shadow_cam->near = 1;
-	shadow_cam->far = 10000;
-	shadow_cam->left = -1000;
-	shadow_cam->right = 1000;
-	shadow_cam->top = 1000;
-	shadow_cam->bottom = -1000;
-
-	std::vector<drawelement_ptr> sponza = MeshLoader::load("render-data/models/plane.obj");
-	shader_ptr shader_normalmapped = make_shader("a6", "shaders/normalmapping.vert", "shaders/normalmapping.frag");
-	shader_ptr shader_shadows      = make_shader("a7", "shaders/shadows.vert", "shaders/shadows.frag");
-
-	shader_ptr light_rep_shader = make_shader("light-rep", "shaders/light_rep.vert", "shaders/light_rep.frag");
-	std::vector<drawelement_ptr> light_rep = MeshLoader::load("render-data/models/sphere.obj", false, [&](const material_ptr &) { return light_rep_shader; });
-	
-	shader_ptr sky_shader = make_shader("sky", "shaders/sky.vert", "shaders/sky.frag");
-	material_ptr sky_mat = make_material("sky");
-	sky_mat->k_diff = glm::vec4(.3,.3,1,1);
-	shared_ptr<Texture2D> sky_tex = make_texture("sky", "render-data/sky.jpg", false);
-	sky_mat->add_texture("tex", sky_tex);
-	drawelement_ptr sky = make_drawelement("sky", sky_shader, sky_mat, light_rep[0]->meshes);
-
-	int sm_w = 1024;
-	auto shadowmap = make_framebuffer("shadowmap", sm_w, sm_w);
-	shadowmap->attach_depthbuffer(make_texture("shadowmap", sm_w, sm_w, GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT));
-	shadowmap->check();
-
-	glBindTexture(GL_TEXTURE_2D, shadowmap->depth_texture->id);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glBindTexture(GL_TEXTURE_2D, 0);
-
-	TimerQuery input_timer("input");
-	TimerQuery update_timer("update");
-	TimerQueryGL render_timer("render");
-	TimerQueryGL render_sm_timer("render shadowmap");
-
-	// -- mine --
-
 	GLuint vao;
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
 
-	int amount = 100;
+	GLfloat vertices_position[m * m * m * 3] = {0};
+	std::vector<glm::vec3> positions;
 
-	GLfloat vertices_position[amount * 3] = {0};
-
-	for (int i = 0; i < amount * 3; ++i) {
-		vertices_position[i] = (std::rand() % 200 - 50);
-	}
+	init(vertices_position, positions);
 
 	GLuint vbo;
 	glGenBuffers(1, &vbo);
@@ -103,57 +168,23 @@ int main(int argc, char** argv) {
 	glVertexAttribPointer(position_attribute, 3, GL_FLOAT, GL_FALSE, 0, 0);
 	glEnableVertexAttribArray(position_attribute);
 
-	// -- mine --
+	Context::set_resize_callback(resize);
+
+	auto rng = std::default_random_engine {};
+	std::shuffle(std::begin(positions), std::end(positions), rng);
+
+	last = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 
 	while (Context::running() && game_is_running) {
 
+		update(vertices_position, positions);	
 		glNamedBufferSubData(vbo, 0, sizeof(vertices_position), vertices_position);
 
-
-
-		for (int i = 0; i < amount * 3; ++i) {
-			for (int j = 0; j < amount * 3; ++j) {
-				if (j == i) continue;
-
-				glm::vec3 first(vertices_position[i], vertices_position[i+1], vertices_position[i+2]);
-				glm::vec3 secon(vertices_position[j], vertices_position[j+1], vertices_position[j+2]);
-
-				glm::vec3 to = first - secon;
-
-				float value = glm::length(to);
-				to = glm::normalize(to);
-
-				glm::vec3 f;
-
-				if (value <= 0) {
-					f = glm::vec3(0, 0, 0.5f);
-				}
-				else if (value > 6) {
-					f = secon + (to * 0.0001f);
-				}
-				else {
-					f = secon - (to * 0.1f);
-				}
-
-				vertices_position[j] =   f.x;
-				vertices_position[j+1] = f.y;
-				vertices_position[j+2] = f.z;
-			}
-			// vertices_position[i] = vertices_position[i] + (std::rand() % 200 - 100) / 100.0;
-		}
-
-		input_timer.start();
 		Camera::default_input_handler(Context::frame_time());
 		Camera::current()->update();
 		static uint32_t counter = 0;
 		if (counter++ % 100 == 0) Shader::reload();
-		input_timer.end();
 
-		static glm::vec3 dirlight_dir = glm::vec3(0.25,-.93,-.25);
-		static glm::vec3 dirlight_col = glm::vec3(1.0,0.97,0.97);
-		static float     dirlight_scale = 1.2f;
-
-		update_timer.start();
 		{
 			static float pi = M_PI;
 			float dt = Context::frame_time();
@@ -164,90 +195,37 @@ int main(int argc, char** argv) {
 				v = max(0.04f, min(v_max, v*1.05f));
 			if (Context::key_pressed(GLFW_KEY_BACKSPACE))
 				v = max(0.0f, v*0.92f);
-
-			shadow_cam->pos = -dirlight_dir*3000.0f;
-			shadow_cam->dir = dirlight_dir;
-			shadow_cam->update();
 		}
-		update_timer.end();
 
-		render_sm_timer.start();
+		ImGui::Begin("Simu");
 
-		auto render = [&](std::shared_ptr<Camera> cam) {
-			cam->make_current();
-			glClear(GL_DEPTH_BUFFER_BIT);
-			for (auto &de : sponza) {
-				de->shader = shader_normalmapped;
-				de->bind();
-				de->shader->uniform("cam_pos", Camera::current()->pos);
-				de->shader->uniform("dirlight_dir", dirlight_dir);
-				de->shader->uniform("dirlight_col", dirlight_col);
-				de->shader->uniform("dirlight_scale", dirlight_scale);
-				de->shader->uniform("has_alphamap", de->material->has_texture("alphamap") ? 1 : 0);
-				de->shader->uniform("has_normalmap", de->material->has_texture("normalmap") ? 1 : 0);
-				de->draw(glm::mat4(1));
-				de->unbind();
-			}
-		};
+		ImGui::SliderInt("Count", &amount, 0, m);
+		ImGui::Separator();
+		ImGui::SliderFloat("K", &k, 1, 500);
+		ImGui::SliderFloat("K near", &k_near, 1, 500);
+		ImGui::SliderFloat("roh", &roh_0, 1, 500);
+		ImGui::SliderInt("size", &particle_diameter, 5, 20);
 
-		glCullFace(GL_FRONT);
-		glEnable(GL_POLYGON_OFFSET_FILL);
-		glPolygonOffset(1,1);
-		shadowmap->bind();
-		render(shadow_cam);
-		shadowmap->unbind();
-		glDisable(GL_POLYGON_OFFSET_FILL);
-		glCullFace(GL_BACK);
-		cam->make_current();
+		if (ImGui::Button("Reset")) {
+			init(vertices_position, positions);
+		}
 
-		render_sm_timer.end();
+		ImGui::End();
 
-		render_timer.start();
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		for (auto &de : sponza) {
-			shader_ptr shader = shader_shadows;
-			de->shader = shader_shadows;
-			de->bind();
-			shader->uniform("cam_pos", Camera::current()->pos);
-			shader->uniform("dirlight_dir", dirlight_dir);
-			shader->uniform("dirlight_col", glm::pow(dirlight_col, glm::vec3(2.2f)));
-			shader->uniform("dirlight_scale", dirlight_scale);
-			shader->uniform("has_alphamap", de->material->has_texture("alphamap") ? 1 : 0);
-			shader->uniform("has_normalmap", de->material->has_texture("normalmap") ? 1 : 0);
-			shader->uniform("shadowmap", shadowmap->depth_texture, 5);
-			shader->uniform("shadow_V", shadow_cam->view);
-			shader->uniform("shadow_P", shadow_cam->proj);
-			de->draw(glm::mat4(1));
-			de->unbind();
-		}
 
 		shader_ptr shader = shader_points;
 		shader->bind();
 		shader->uniform("view", cam->view);
 		shader->uniform("proj", cam->proj);
+		shader->uniform("screen_size", glm::vec2(width, height));
+		shader->uniform("sprite_size", (float) particle_diameter);
+
 		glBindVertexArray(vao);
-		glDrawArrays(GL_POINTS, 0, amount);
-
-		glDisable(GL_CULL_FACE);
-		float n = Camera::current()->near;
-		float f = Camera::current()->far;
-		Camera::current()->near = 10;
-		Camera::current()->far = 20000;
-		Camera::current()->update();
-		sky->bind();
-		sky->draw(glm::scale(glm::mat4(1), glm::vec3(15000,15000,15000)));
-		sky->unbind();
-		Camera::current()->near = n;
-		Camera::current()->far = f;
-		glEnable(GL_CULL_FACE);
-
-		
-
-
-		render_timer.end();
+		glDrawArrays(GL_POINTS, 0, amount * amount * amount);
 
 		Context::swap_buffers();
+		
 	}
 
 	return 0;
