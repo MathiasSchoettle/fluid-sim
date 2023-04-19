@@ -23,7 +23,7 @@ float k = 1, k_near = 50, roh_0 = 8.0f;
 glm::vec3 gravity(0, 0, 0);
 
 float alpha = 0.3, gama = 0.1;
-float sigma = 0.5, betta = 0.25;
+float sigma = 0.0, betta = 0.05;
 
 float L_frac = 0.1;
 float k_spring = 0.3;
@@ -76,7 +76,7 @@ void update(GLfloat* vertices_position, vector<glm::vec3> &positions, vector<glm
 
 	delta_t = 0.1;
 
-	float h = particle_diameter * 1.5;
+	float h = particle_diameter * 2;
 
 	// gravity
 	for (int i = 0; i < positions.size(); ++i) {
@@ -190,7 +190,7 @@ void update(GLfloat* vertices_position, vector<glm::vec3> &positions, vector<glm
 		auto pos = positions[i];
 		vertices_position[i * 3] = pos.y;
 		vertices_position[i * 3 + 2] = pos.x;
-		vertices_position[i * 3 + 1] = max(0.0f, pos.z);
+		vertices_position[i * 3 + 1] = pos.z;
 		velocities[i] = (pos - old_posis[i]) / delta_t;
 	}
 }
@@ -211,7 +211,7 @@ int main(int argc, char** argv) {
 	cam->up = glm::vec3(0,1,0);
 	cam->fix_up_vector = true;
 	cam->near = 1;
-	cam->far = 12500;
+	cam->far = 1000;
 	cam->make_current();
 	Camera::default_camera_movement_speed = 0.4;
 
@@ -310,6 +310,9 @@ int main(int argc, char** argv) {
 		shader->uniform("proj", cam->proj);
 		shader->uniform("screen_size", glm::vec2(width, height));
 		shader->uniform("sprite_size", (float) particle_diameter);
+
+		shader->uniform("n", cam->near);
+		shader->uniform("f", cam->far);
 
 		glBindVertexArray(vao);
 		glDrawArrays(GL_POINTS, 0, 1000);
