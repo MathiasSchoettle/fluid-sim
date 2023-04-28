@@ -8,12 +8,7 @@ uniform mat4 proj;
 uniform ivec2 screen_size;
 uniform float sprite_size;
 
-out float size;
-out vec4 world;
-
 void main() {
-	world = vec4(position, 1);
 	gl_Position = proj * view * vec4(position, 1);
 	gl_PointSize = screen_size.y * (1.0 / tan(45.0)) * sprite_size / gl_Position.w;
-	size = sprite_size;
 }

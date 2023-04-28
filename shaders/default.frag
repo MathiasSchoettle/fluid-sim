@@ -1,10 +1,6 @@
 #version 440
 
-in float size;
-in vec4 world;
-
-uniform mat4 view;
-uniform mat4 proj;
+uniform float sprite_size;
 uniform float f;
 uniform float n;
 
@@ -25,14 +21,12 @@ float linearize_depth(float depth) {
 }
 
 void main() {
-	vec2 distance = gl_PointCoord - vec2(0.5, 0.5);
+	vec2 distance = gl_PointCoord - vec2(0.5);
 
-	if (dot(distance, distance) > 0.25) {
-		discard;
-	}
+	if (dot(distance, distance) > 0.25) discard;
 
-	vec2 world_space = distance * 2 * size;
-	float depth_offset = sqrt(size * size - dot(world_space, world_space));
+	vec2 world_space = distance * 2 * sprite_size;
+	float depth_offset = sqrt(sprite_size * sprite_size - dot(world_space, world_space));
 
 	float epsilon = 0.125; // TODO calculate from point size
 	float depth = depth_sample(linear_depth(gl_FragCoord.z) - depth_offset + epsilon);

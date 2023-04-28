@@ -17,11 +17,9 @@
 using namespace std;
 using namespace std::chrono;
 
-bool game_is_running = true;
 int width = 1280, height = 720;
 float n = 0.1, f = 50;
 
-// buffers
 GLuint g_buffer;
 
 void setup_g_buffer() {
@@ -92,12 +90,11 @@ int main(int argc, char** argv) {
 
 	glEnable(GL_PROGRAM_POINT_SIZE);
 
-	while (Context::running() && game_is_running) {
+	setup_g_buffer();
+
+	while (Context::running()) {
 		Camera::default_input_handler(Context::frame_time());
 		Camera::current()->update();
-
-		static uint32_t counter = 0;
-		if (counter++ % 100 == 0) Shader::reload();
 
 		ImGui::Begin("Simulation");
 		ImGui::SliderFloat("size", &sim.particle_diameter, 0.2, 5);
@@ -112,10 +109,12 @@ int main(int argc, char** argv) {
 		ImGui::SliderFloat("beta", &sim.beta, 0.0, 0.5);
 		if (ImGui::Button("Reset")) {
 			sim.set_data();
+			Shader::reload();
 		}
 		ImGui::End();
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		
 		sim.step();
 
 		shader_ptr shader = shader_points;

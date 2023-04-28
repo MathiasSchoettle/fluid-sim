@@ -14,14 +14,13 @@ class simulation {
 	GLuint vbo;
 	std::vector<particle> particles;
 
-
 public:
 	float particle_diameter = 2.0f;
 	float delta_time = 0.1f;
 	glm::vec3 gravity = glm::vec3(0);
 	int particle_count = 1000;
 	// pressure params
-	float k = 1.0, k_near = 20.0, roh_0 = 8.0;
+	float k = 1.0, k_near = 10.0, roh_0 = 8.0;
 	// viscosity params
 	float sigma = 0.0, beta = 0.0;
 	// spring params - not yet used
