@@ -8,12 +8,11 @@ uniform vec2 screen_size;
 uniform float sprite_size;
 
 out float size;
+out vec4 world;
 
 void main() {
-	vec4 eyePos = view * in_pos;
-	vec4 projVoxel = proj * vec4(sprite_size,sprite_size,eyePos.z,eyePos.w);
-	vec2 projSize = screen_size * projVoxel.xy / projVoxel.w;
-	gl_PointSize = 0.25 * (projSize.x+projSize.y);
-	size = gl_PointSize;
-	gl_Position = proj * eyePos;
+	world = in_pos;
+	gl_Position = proj * view * in_pos;
+	gl_PointSize = screen_size.y * (1.0 / tan(45.0)) * sprite_size / gl_Position.w;
+	size = sprite_size;
 }

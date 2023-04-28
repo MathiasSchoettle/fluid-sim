@@ -19,6 +19,8 @@ using namespace std::chrono;
 bool game_is_running = true;
 int m = 32;
 int width = 1280, height = 720;
+float n = 0.1, f = 50;
+
 float k = 1, k_near = 50, roh_0 = 8.0f;
 glm::vec3 gravity(0, 0, 0);
 
@@ -30,7 +32,7 @@ float k_spring = 0.3;
 
 int last;
 
-int particle_diameter = 10;
+float particle_diameter = 2;
 
 void resize(int w, int h) {
 	width = w;
@@ -50,9 +52,9 @@ void init(GLfloat* vertices_position, vector<glm::vec3> &positions, vector<glm::
 			for (int k = 0; k < amount; ++k) {
 				int index = i * amount * amount + j * amount + k;
 
-				float x = i * (particle_diameter + 5);
-				float y = j * (particle_diameter + 5);
-				float z = k * (particle_diameter + 5);
+				float x = i * (particle_diameter + 1);
+				float y = j * (particle_diameter + 1);
+				float z = k * (particle_diameter + 1);
 
 				vertices_position[index * 3] = x;
 				vertices_position[index * 3 + 2] = y;
@@ -206,14 +208,15 @@ int main(int argc, char** argv) {
 	Context::init(params);
 
 	auto cam = make_camera("cam");
-	cam->pos = glm::vec3(-80,202,-27);
-	cam->dir = glm::vec3(0.778490, -0.595482, 0.198381);
+	cam->pos = glm::vec3(-8.119548, 16.163836, -0.112831);
+	cam->dir = glm::vec3(0.772751, -0.531802, 0.346472);
 	cam->up = glm::vec3(0,1,0);
+	cam->fov_degree = 90;
 	cam->fix_up_vector = true;
-	cam->near = 1;
-	cam->far = 1000;
+	cam->near = n;
+	cam->far = f;
 	cam->make_current();
-	Camera::default_camera_movement_speed = 0.4;
+	Camera::default_camera_movement_speed = 0.02;
 
 	GLuint vao;
 	glGenVertexArrays(1, &vao);
@@ -252,6 +255,7 @@ int main(int argc, char** argv) {
 
 		update(vertices_position, positions, velocities, springs);
 
+		//cout << glm::to_string(cam->pos) << " - " << glm::to_string(cam->dir) << endl;
 
 		glNamedBufferSubData(vbo, 0, sizeof(vertices_position), vertices_position);
 
@@ -274,7 +278,7 @@ int main(int argc, char** argv) {
 
 		ImGui::Begin("Simulation");
 
-		ImGui::SliderInt("size", &particle_diameter, 5, 20);
+		ImGui::SliderFloat("size", &particle_diameter, 0.2, 5);
 
 		ImGui::Separator();
 
@@ -309,7 +313,7 @@ int main(int argc, char** argv) {
 		shader->uniform("view", cam->view);
 		shader->uniform("proj", cam->proj);
 		shader->uniform("screen_size", glm::vec2(width, height));
-		shader->uniform("sprite_size", (float) particle_diameter);
+		shader->uniform("sprite_size", particle_diameter);
 
 		shader->uniform("n", cam->near);
 		shader->uniform("f", cam->far);
