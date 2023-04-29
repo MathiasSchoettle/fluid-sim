@@ -11,6 +11,11 @@ simulation::simulation() {
 	initialize();
 }
 
+simulation::~simulation() {
+	glDeleteBuffers(1, &vbo);
+	glDeleteVertexArrays(1, &vao);	
+}
+
 void simulation::initialize() {
 	set_data();
 
@@ -27,10 +32,13 @@ void simulation::initialize() {
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(particle), (const void *)(3 * sizeof(float)));
 }
 
-void simulation::draw() {
+void simulation::draw(GLuint g_buffer) {
+	glBindFramebuffer(GL_FRAMEBUFFER, g_buffer);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glNamedBufferSubData(vbo, 0, (particles.size()) * sizeof(particle), particles.data());
 	glBindVertexArray(vao);
 	glDrawArrays(GL_POINTS, 0, particle_count);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void simulation::step() {
@@ -175,6 +183,7 @@ void simulation::set_data() {
 				particles.push_back(p);
 			}
 	
+	// shuffle so updates are more random
 	auto rng = std::default_random_engine {};
 	std::shuffle(std::begin(particles), std::end(particles), rng);
 }

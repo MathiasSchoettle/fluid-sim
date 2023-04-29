@@ -13,6 +13,7 @@
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include "simulation.h"
+#include "quad.h"
 
 using namespace std;
 using namespace std::chrono;
@@ -21,12 +22,12 @@ int width = 1280, height = 720;
 float n = 0.1, f = 50;
 
 GLuint g_buffer;
+GLuint g_pos, g_norm, g_col;
 
 void setup_g_buffer() {
 
 	glGenFramebuffers(1, &g_buffer);
 	glBindFramebuffer(GL_FRAMEBUFFER, g_buffer);
-	GLuint g_pos, g_norm, g_col;
 
 	glGenTextures(1, &g_pos);
 	glBindTexture(GL_TEXTURE_2D, g_pos);
@@ -86,7 +87,9 @@ int main(int argc, char** argv) {
 	Camera::default_camera_movement_speed = 0.02;
 
 	shader_ptr shader_points = make_shader("mine", "shaders/default.vert", "shaders/default.frag");
+	shader_ptr shader_quad = make_shader("quad", "shaders/quad.vert", "shaders/quad.frag");
 	simulation sim;
+	quad quad;
 
 	glEnable(GL_PROGRAM_POINT_SIZE);
 
@@ -112,21 +115,46 @@ int main(int argc, char** argv) {
 			Shader::reload();
 		}
 		ImGui::End();
-
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
 		sim.step();
 
-		shader_ptr shader = shader_points;
-		shader->bind();
-		shader->uniform("view", cam->view);
-		shader->uniform("proj", cam->proj);
-		shader->uniform("screen_size", Context::resolution());
-		shader->uniform("sprite_size", sim.particle_diameter);
-		shader->uniform("n", cam->near);
-		shader->uniform("f", cam->far);
+		shader_points->bind();
+		shader_points->uniform("view", cam->view);
+		shader_points->uniform("proj", cam->proj);
+		shader_points->uniform("screen_size", Context::resolution());
+		shader_points->uniform("sprite_size", sim.particle_diameter);
+		shader_points->uniform("n", cam->near);
+		shader_points->uniform("f", cam->far);
 		
-		sim.draw();
+		sim.draw(g_buffer);
+
+		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
+
+		shader_quad->bind();
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, g_pos);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, g_norm);
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, g_col);
+
+		shader_quad->uniform("g_pos", 0);
+		shader_quad->uniform("g_norm", 1);
+		shader_quad->uniform("g_col", 2);
+		shader_quad->uniform("n", cam->near);
+		shader_quad->uniform("f", cam->far);
+
+		quad.draw();
+
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, g_buffer);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+		glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 		Context::swap_buffers();
 	}

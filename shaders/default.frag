@@ -1,10 +1,12 @@
 #version 440
 
+layout (location = 0) out vec3 g_pos;
+layout (location = 1) out vec3 g_norm;
+layout (location = 2) out vec4 g_col;
+
 uniform float sprite_size;
 uniform float f;
 uniform float n;
-
-out vec4 out_col;
 
 float linear_depth(float depth) {
 	depth = 2.0 * depth - 1.0;
@@ -31,6 +33,8 @@ void main() {
 	float epsilon = 0.125; // TODO calculate from point size
 	float depth = depth_sample(linear_depth(gl_FragCoord.z) - depth_offset + epsilon);
 	gl_FragDepth = depth;
-	
-	out_col = vec4(linearize_depth(depth));
+
+	g_pos = vec3(world_space, 1);
+	g_norm = vec3(0.2, 0.4, 0.8);
+	g_col = vec4(linearize_depth(depth));
 }

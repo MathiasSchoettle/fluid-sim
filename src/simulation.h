@@ -28,8 +28,9 @@ public:
 	float L_frac = 0.1, k_spring = 0.3;
 
 	simulation();
+	~simulation();
 	void initialize();
 	void set_data();
-	void draw();
+	void draw(GLuint g_buffer);
 	void step();
 };
