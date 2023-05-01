@@ -30,18 +30,20 @@ void simulation::initialize() {
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(particle), 0);
 	glEnableVertexAttribArray(1);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(particle), (const void *)(3 * sizeof(float)));
+	glEnableVertexAttribArray(2);
+	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(particle), (const void *)(6 * sizeof(float)));
 }
 
-void simulation::draw(GLuint g_buffer) {
-	glBindFramebuffer(GL_FRAMEBUFFER, g_buffer);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+void simulation::draw() {
 	glNamedBufferSubData(vbo, 0, (particles.size()) * sizeof(particle), particles.data());
 	glBindVertexArray(vao);
 	glDrawArrays(GL_POINTS, 0, particle_count);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void simulation::step() {
+
+	if (pause) return;
+
 	std::vector<glm::vec3> old_positions(particles.size());
 	float h = particle_diameter * 2;
 
@@ -164,22 +166,29 @@ void simulation::step() {
 		particles[i].velocity = (particles[i].position - old_positions[i]) / delta_time;
 }
 
+float get_rand() {
+	return static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
+}
+
 void simulation::set_data() {
 	particles.clear();
 	particles.reserve(particle_count);
-	int per_side = 10;
+	int per_side = 11;
+
+	float mult = 1.25;
 
 	for (int x = 0; x < per_side; ++x)
 		for (int y = 0; y < per_side; ++y)
 			for (int z = 0; z < per_side; ++z) {
 				particle p;
 				p.position = glm::vec3(
-					x * particle_diameter * 1.5,
-					y * particle_diameter * 1.5,
-					z * particle_diameter * 1.5
+					x * particle_diameter * mult,
+					y * particle_diameter * mult,
+					z * particle_diameter * mult
 				);
 
 				p.velocity = glm::vec3(0);
+				p.color = glm::vec3(0.8, 0.2, 0.2) + 0.1f;
 				particles.push_back(p);
 			}
 	

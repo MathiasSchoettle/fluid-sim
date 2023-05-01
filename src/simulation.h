@@ -7,6 +7,7 @@
 struct particle {
 	glm::vec3 position;
 	glm::vec3 velocity;
+	glm::vec3 color;
 };
 
 class simulation {
@@ -15,22 +16,24 @@ class simulation {
 	std::vector<particle> particles;
 
 public:
-	float particle_diameter = 2.0f;
+	float particle_diameter = .5f;
 	float delta_time = 0.1f;
 	glm::vec3 gravity = glm::vec3(0);
-	int particle_count = 1000;
+	int particle_count = 1331;
 	// pressure params
-	float k = 1.0, k_near = 10.0, roh_0 = 8.0;
+	float k = 1.0, k_near = 5.0, roh_0 = 10.0;
 	// viscosity params
 	float sigma = 0.0, beta = 0.0;
 	// spring params - not yet used
 	float alpha = 0.3, gamma = 0.1;
 	float L_frac = 0.1, k_spring = 0.3;
 
+	bool pause = false;
+
 	simulation();
 	~simulation();
 	void initialize();
 	void set_data();
-	void draw(GLuint g_buffer);
+	void draw();
 	void step();
 };
