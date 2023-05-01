@@ -13,7 +13,7 @@ uniform mat4 view;
 
 vec3 light_color = vec3(1);
 float ambient_strength = 0.25;
-float specular_strength = 0.5;
+float specular_strength = 1;
 
 out vec3 out_color;
 
@@ -37,12 +37,12 @@ void main()
 	vec3 diffuse = max(-dot(normal, light_dir), 0.0) * light_color;
 	vec3 ref = reflect(light_dir, normal);
 
-	float spec = pow(max(ref.z, 0.0), 32);
+	float spec = pow(max(ref.z, 0.0), 64);
 	vec3 specular = specular_strength * spec * light_color;
 
 	vec3 color_w = col.xyz / col.a;
 	vec3 res = (diffuse + ambient + specular) * color_w;
 
-	out_color = normal_vis;
 	out_color = res;
+	out_color = normal_vis;
 }

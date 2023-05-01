@@ -173,7 +173,7 @@ float get_rand() {
 void simulation::set_data() {
 	particles.clear();
 	particles.reserve(particle_count);
-	int per_side = 11;
+	int per_side = 10;
 
 	float mult = 1.25;
 
@@ -188,7 +188,8 @@ void simulation::set_data() {
 				);
 
 				p.velocity = glm::vec3(0);
-				p.color = glm::vec3(0.8, 0.2, 0.2) + 0.1f;
+				p.color = glm::vec3(get_rand(), get_rand(), get_rand());
+				p.color = glm::vec3(0.9, 0.3, 0.3);
 				particles.push_back(p);
 			}
 	

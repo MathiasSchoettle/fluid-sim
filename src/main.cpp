@@ -20,7 +20,7 @@ using namespace std;
 using namespace std::chrono;
 
 int width = 1280, height = 720;
-float n = 0.1, f = 50;
+float n = 0.1, f = 100;
 float EPSILON_MULT = 0.5;
 
 GLuint g_buffer;
@@ -108,8 +108,9 @@ int main(int argc, char** argv) {
 		Camera::current()->update();
 
 		ImGui::Begin("Simulation");
-		ImGui::SliderFloat("time step", &sim.delta_time, 0.01, 0.5);
+		ImGui::Text("Fps: %f", ImGui::GetIO().Framerate);
 		ImGui::SliderFloat("size", &sim.particle_diameter, 0.2, 5);
+		ImGui::SliderFloat("time step", &sim.delta_time, 0.01, 0.5);
 		ImGui::Separator();
 		ImGui::Text("Density relaxation");
 		ImGui::SliderFloat("k", &sim.k, 0.001, 2);
@@ -138,7 +139,7 @@ int main(int argc, char** argv) {
 		shader_depth->uniform("view", cam->view);
 		shader_depth->uniform("proj", cam->proj);
 		shader_depth->uniform("screen_size", Context::resolution());
-		shader_depth->uniform("sprite_size", sim.particle_diameter);
+		shader_depth->uniform("sprite_size", sim.particle_diameter * 2.0f);
 		shader_depth->uniform("n", cam->near);
 		shader_depth->uniform("f", cam->far);
 		shader_depth->uniform("eps", sim.particle_diameter * EPSILON_MULT);
@@ -158,7 +159,7 @@ int main(int argc, char** argv) {
 		shader_attribs->uniform("view", cam->view);
 		shader_attribs->uniform("proj", cam->proj);
 		shader_attribs->uniform("screen_size", Context::resolution());
-		shader_attribs->uniform("sprite_size", sim.particle_diameter);
+		shader_attribs->uniform("sprite_size", sim.particle_diameter * 2.0f);
 		shader_attribs->uniform("n", cam->near);
 		shader_attribs->uniform("f", cam->far);
 		shader_attribs->uniform("eps", sim.particle_diameter * EPSILON_MULT);

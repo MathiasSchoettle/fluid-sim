@@ -19,7 +19,7 @@ public:
 	float particle_diameter = .5f;
 	float delta_time = 0.1f;
 	glm::vec3 gravity = glm::vec3(0);
-	int particle_count = 1331;
+	int particle_count = 1000;
 	// pressure params
 	float k = 1.0, k_near = 5.0, roh_0 = 10.0;
 	// viscosity params
