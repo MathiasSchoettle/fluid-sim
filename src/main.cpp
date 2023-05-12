@@ -15,6 +15,7 @@
 
 #include "simulation.h"
 #include "quad.h"
+#include "hw.h"
 
 using namespace std;
 using namespace std::chrono;
@@ -62,6 +63,8 @@ void setup_g_buffer() {
 }
 
 int main(int argc, char** argv) {
+
+	hello_world();
 
 	ContextParameters params;
 	params.gl_major = 4;

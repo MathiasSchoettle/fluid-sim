@@ -43,6 +43,6 @@ void main()
 	vec3 color_w = col.xyz / col.a;
 	vec3 res = (diffuse + ambient + specular) * color_w;
 
-	out_color = res;
 	out_color = normal_vis;
+	out_color = res;
 }

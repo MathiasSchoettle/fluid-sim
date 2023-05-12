@@ -36,3 +36,4 @@ autom4te.cache
 auxx/missing
 auxx/depcomp
 auxx/install-sh
+myprogram
