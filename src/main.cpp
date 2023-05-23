@@ -15,14 +15,15 @@
 
 #include "simulation.h"
 #include "quad.h"
-#include "hw.h"
+#include "box.h"
 
 using namespace std;
 using namespace std::chrono;
 
 int width = 1280, height = 720;
-float n = 0.1, f = 100;
+float n = 0.1, f = 250;
 float EPSILON_MULT = 0.5;
+bool draw_box = false;
 
 GLuint g_buffer;
 GLuint g_norm, g_col, g_depth;
@@ -64,8 +65,6 @@ void setup_g_buffer() {
 
 int main(int argc, char** argv) {
 
-	hello_world();
-
 	ContextParameters params;
 	params.gl_major = 4;
 	params.gl_minor = 4;
@@ -75,8 +74,8 @@ int main(int argc, char** argv) {
 	Context::init(params);
 
 	auto cam = make_camera("cam");
-	cam->pos = glm::vec3(-8.119548, 16.163836, -0.112831);
-	cam->dir = glm::vec3(0.772751, -0.531802, 0.346472);
+	cam->pos = glm::vec3(13.8, 69.3, -37.0);
+	cam->dir = glm::vec3(0.317, -0.483, 0.816);
 	cam->up = glm::vec3(0,1,0);
 	cam->fov_degree = 90;
 	cam->fix_up_vector = true;
@@ -95,9 +94,11 @@ int main(int argc, char** argv) {
 	shader_ptr shader_depth = make_shader("depth", "shaders/default.vert", "shaders/depth.frag");
 	shader_ptr shader_attribs = make_shader("attribs", "shaders/default.vert", "shaders/default.frag");
 	shader_ptr shader_quad = make_shader("quad", "shaders/quad.vert", "shaders/quad.frag");
+	shader_ptr shader_box = make_shader("box", "shaders/box.vert", "shaders/box.frag");
 
 	simulation sim;
 	quad quad;
+	box box;
 
 	glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
 	glPointParameteri(GL_POINT_SPRITE_COORD_ORIGIN, GL_LOWER_LEFT);
@@ -111,24 +112,40 @@ int main(int argc, char** argv) {
 		Camera::current()->update();
 
 		ImGui::Begin("Simulation");
+		ImGui::Text("Particle count: %d", sim.particle_count);
 		ImGui::Text("Fps: %f", ImGui::GetIO().Framerate);
-		ImGui::SliderFloat("size", &sim.particle_diameter, 0.2, 5);
-		ImGui::SliderFloat("time step", &sim.delta_time, 0.01, 0.5);
+
+		if (ImGui::Button(sim.pause ? "Resume" : "Pause")) {
+			sim.pause = !sim.pause;
+		}
+
+		ImGui::Checkbox("draw box", &draw_box);
+
+		ImGui::Text("Pos: (%f, %f %f)", cam->pos.x, cam->pos.y, cam->pos.z);
+		ImGui::Text("Dir: (%f, %f %f)", cam->dir.x, cam->dir.y, cam->dir.z);
+		
 		ImGui::Separator();
+
 		ImGui::Text("Density relaxation");
 		ImGui::SliderFloat("k", &sim.k, 0.001, 2);
 		ImGui::SliderFloat("k near", &sim.k_near, 0.1, 30);
 		ImGui::SliderFloat("roh", &sim.roh_0, 1, 15);
+		
 		ImGui::Separator();
+		
 		ImGui::Text("Viscosity");
-		ImGui::SliderFloat("sigma", &sim.sigma, 0.0, 5.0);
-		ImGui::SliderFloat("beta", &sim.beta, 0.0, 5.0);
+		ImGui::SliderFloat("sigma", &sim.sigma, 0.0, 20.0);
+		ImGui::SliderFloat("beta", &sim.beta, 0.0, 20.0);
+		ImGui::SliderFloat3("gravity", &sim.gravity.x, -9.81, 9.81);
+
+		if (ImGui::Button("Gravity reset")) {
+			sim.gravity = glm::vec3(0);
+		}
+
 		if (ImGui::Button("Reset")) {
 			sim.set_data();
 		}
-		if (ImGui::Button("Pause")) {
-			sim.pause = !sim.pause;
-		}
+		
 		ImGui::End();
 
 		if (count++ > 100) {
@@ -138,11 +155,13 @@ int main(int argc, char** argv) {
 
 		sim.step();
 
+		float sprite_size = sim.particle_diameter * 1.5f;
+
 		shader_depth->bind();
 		shader_depth->uniform("view", cam->view);
 		shader_depth->uniform("proj", cam->proj);
 		shader_depth->uniform("screen_size", Context::resolution());
-		shader_depth->uniform("sprite_size", sim.particle_diameter * 2.0f);
+		shader_depth->uniform("sprite_size", sprite_size);
 		shader_depth->uniform("n", cam->near);
 		shader_depth->uniform("f", cam->far);
 		shader_depth->uniform("eps", sim.particle_diameter * EPSILON_MULT);
@@ -162,7 +181,7 @@ int main(int argc, char** argv) {
 		shader_attribs->uniform("view", cam->view);
 		shader_attribs->uniform("proj", cam->proj);
 		shader_attribs->uniform("screen_size", Context::resolution());
-		shader_attribs->uniform("sprite_size", sim.particle_diameter * 2.0f);
+		shader_attribs->uniform("sprite_size", sprite_size);
 		shader_attribs->uniform("n", cam->near);
 		shader_attribs->uniform("f", cam->far);
 		shader_attribs->uniform("eps", sim.particle_diameter * EPSILON_MULT);
@@ -175,6 +194,15 @@ int main(int argc, char** argv) {
 		glDisable(GL_DEPTH_TEST);
 		
 		sim.draw();
+
+		shader_box->bind();
+		shader_box->uniform("view", cam->view);
+		shader_box->uniform("proj", cam->proj);
+
+		glDepthMask(GL_TRUE);
+		glDisable(GL_BLEND);
+
+		if (draw_box) box.draw();
 
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -205,6 +233,8 @@ int main(int argc, char** argv) {
 		quad.draw();
 
 		Context::swap_buffers();
+
+		// return 0;
 	}
 
 	return 0;

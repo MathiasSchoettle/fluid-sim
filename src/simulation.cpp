@@ -1,4 +1,5 @@
 #include "simulation.h"
+#include "simulation-cuda.h"
 
 #include <chrono>
 #include <random>
@@ -44,6 +45,10 @@ void simulation::step() {
 
 	if (pause) return;
 
+	cuda_fast_step(particles, 1.5f, 100, delta_time, particle_diameter * 1.5f, sigma, beta, k, roh_0, k_near, gravity);
+
+	return;
+
 	std::vector<glm::vec3> old_positions(particles.size());
 	float h = particle_diameter * 2;
 
@@ -53,6 +58,7 @@ void simulation::step() {
 	}
 
 	// viscosity
+	#pragma omp parallel
 	for (int i = 0; i < particles.size() - 1; ++i)
 		for (int j = i + 1; j < particles.size(); ++j) {
 			auto &current = particles[i];
@@ -172,28 +178,105 @@ float get_rand() {
 
 void simulation::set_data() {
 	particles.clear();
-	particles.reserve(particle_count);
-	int per_side = 10;
 
-	float mult = 1.25;
+	float mult = 0.75;
+	float pos_offset = 100;
 
+	for (int x = 0; x < per_side; ++x)
+		for (int y = 0; y < per_side; ++y)
+			for (int z = 0; z < per_side * 3; ++z) {
+				particle p;
+				p.position = glm::vec3(
+					x * particle_diameter * mult + 42.5,
+					y * particle_diameter * mult + 10,
+					z * particle_diameter * mult + 42.5
+				);
+
+				p.velocity = glm::vec3(0);
+				p.color = glm::vec3(0.913, 0.878, 0.784) * 0.75f;
+				particles.push_back(p);
+			}
+	
 	for (int x = 0; x < per_side; ++x)
 		for (int y = 0; y < per_side; ++y)
 			for (int z = 0; z < per_side; ++z) {
 				particle p;
 				p.position = glm::vec3(
-					x * particle_diameter * mult,
-					y * particle_diameter * mult,
-					z * particle_diameter * mult
+					x * particle_diameter * mult + 42.5,
+					y * particle_diameter * mult + 60,
+					z * particle_diameter * mult + 42.5
 				);
 
 				p.velocity = glm::vec3(0);
-				p.color = glm::vec3(get_rand(), get_rand(), get_rand());
-				p.color = glm::vec3(0.9, 0.3, 0.3);
+				p.color = glm::vec3(0.213, 0.278, 0.784) * 0.75f; // blue
 				particles.push_back(p);
 			}
 	
+
+	for (int x = 0; x < per_side * 2; ++x)
+		for (int y = 0; y < per_side; ++y)
+			for (int z = 0; z < per_side; ++z) {
+				particle p;
+				p.position = glm::vec3(
+					x * particle_diameter * mult + 32.5,
+					y * particle_diameter * mult + 60,
+					z * particle_diameter * mult + 12.5
+				);
+
+				p.velocity = glm::vec3(0);
+				p.color = glm::vec3(0.213, 0.878, 0.784) * 0.75f; // turquouise
+				particles.push_back(p);
+			}
+
+	for (int x = 0; x < per_side; ++x)
+		for (int y = 0; y < per_side * 2; ++y)
+			for (int z = 0; z < per_side; ++z) {
+				particle p;
+				p.position = glm::vec3(
+					x * particle_diameter * mult + 22.5,
+					y * particle_diameter * mult + 70,
+					z * particle_diameter * mult + 62.5
+				);
+
+				p.velocity = glm::vec3(0);
+				p.color = glm::vec3(0.913, 0.878, 0.784) * 0.75f;
+				particles.push_back(p);
+			}
+
+	for (int x = 0; x < per_side; ++x)
+		for (int y = 0; y < per_side * 2; ++y)
+			for (int z = 0; z < per_side; ++z) {
+				particle p;
+				p.position = glm::vec3(
+					x * particle_diameter * mult + 22.5,
+					y * particle_diameter * mult + 20,
+					z * particle_diameter * mult + 22.5
+				);
+
+				p.velocity = glm::vec3(0);
+				p.color = glm::vec3(0.413, 0.878, 0.984) * 0.75f;
+				particles.push_back(p);
+			}
+
+	
+	for (int x = 0; x < per_side; ++x)
+		for (int y = -30; y < per_side * 2.5; ++y)
+			for (int z = 0; z < per_side; ++z) {
+				particle p;
+				p.position = glm::vec3(
+					x * particle_diameter * mult + 62.5,
+					y * particle_diameter * mult + 60,
+					z * particle_diameter * mult + 52.5
+				);
+
+				p.velocity = glm::vec3(0);
+				p.color = glm::vec3(0.05, 0.478, 0.784) * 0.75f;
+				particles.push_back(p);
+			}
+
 	// shuffle so updates are more random
 	auto rng = std::default_random_engine {};
 	std::shuffle(std::begin(particles), std::end(particles), rng);
+	
+	particle_count = particles.size();
 }

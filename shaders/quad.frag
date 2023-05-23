@@ -12,8 +12,8 @@ uniform vec3 light_dir;
 uniform mat4 view;
 
 vec3 light_color = vec3(1);
-float ambient_strength = 0.25;
-float specular_strength = 1;
+float ambient_strength = 0.3;
+float specular_strength = 2;
 
 out vec3 out_color;
 
