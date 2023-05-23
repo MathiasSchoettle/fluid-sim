@@ -8,8 +8,9 @@ Makefile.in
 .dirstamp
 *.o
 *~
+*.d
 
-/src/cg
+fluid
 
 imgui.ini
 
