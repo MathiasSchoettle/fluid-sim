@@ -1,9 +1,12 @@
 #include "simulation-cuda.h"
 
 #include <iostream>
+#include <chrono>
 #include <cub/cub.cuh> 
 
 using namespace std;
+
+#define MAX_PARTICLES 10
 
 #define CC
 
@@ -20,7 +23,7 @@ using namespace std;
 	}                                                                         \
 }
 
-#define CUDA_TIME(call) \
+#define CUDA_TIME(call, name) \
 { \
     cudaEvent_t start, end; \
     cudaEventCreate(&start); \
@@ -33,13 +36,13 @@ using namespace std;
     cudaEventRecord(end); \
     cudaEventSynchronize(end); \
     \
-    float duration; \
-    cudaEventElapsedTime(&duration, start, end); \
+	float time = 0; \
+    cudaEventElapsedTime(&time, start, end); \
+	if (times[name].size() > MAX_TIMES) times[name].pop_back(); \
+	times[name].insert(times[name].begin(), time); \
     \
     cudaEventDestroy(start); \
     cudaEventDestroy(end); \
-    \
-    printf("%f\n", duration / 1000); \
 }
 
 #else
@@ -119,7 +122,7 @@ __global__ void viscosity(particle *particles, int *cell_starts, int *cell_ends,
 				int current_linear = linear_grid_index(current.x, current.y, current.z, grid_size);
 
 				// viscosity over neighbours
-				for (int i = cell_starts[current_linear]; i < cell_ends[current_linear]; ++i) {
+				for (int i = cell_starts[current_linear]; i < cell_ends[current_linear] && i < cell_starts[current_linear] + MAX_PARTICLES; ++i) {
 
 					int particle_index = particle_ids_sorted[i];
 					if (particle_index > index) continue;
@@ -137,7 +140,6 @@ __global__ void viscosity(particle *particles, int *cell_starts, int *cell_ends,
 							particles[particle_index].velocity += I;
 						}
 					}
-
 				}
 			}
 }
@@ -153,35 +155,35 @@ __global__ void slow_down(particle *particles, int particle_count) {
 	}
 }
 
-__device__ void dampen(particle &p) {
-	float damping = -0.37f;
+__device__ void dampen(particle &p, float grid_size) {
+	float damping = -0.3f;
 	float epsilon = 0.0001f;
 
 	if (p.position.x - epsilon < 0.0f) {
 		p.velocity.x *= damping;
 		p.position.x = epsilon;
 	}
-	else if (p.position.x + epsilon > 100 - 1.0f) {
+	else if (p.position.x + epsilon > grid_size - 1.0f) {
 		p.velocity.x *= damping;
-		p.position.x = 100 - 1 - epsilon;
+		p.position.x = grid_size - 1 - epsilon;
 	}
 
 	if (p.position.y - epsilon < 0.0f) {
 		p.velocity.y *= damping;
 		p.position.y = epsilon;
 	}
-	else if (p.position.y + epsilon > 100 - 1.0f) {
+	else if (p.position.y + epsilon > grid_size - 1.0f) {
 		p.velocity.y *= damping;
-		p.position.y = 100 - 1 - epsilon;
+		p.position.y = grid_size - 1 - epsilon;
 	}
 	
 	if (p.position.z - epsilon < 0.0f) {
 		p.velocity.z *= damping;
 		p.position.z = epsilon;
 	}
-	else if (p.position.z + epsilon > 100 - 1.0f) {
+	else if (p.position.z + epsilon > grid_size - 1.0f) {
 		p.velocity.z *= damping;
-		p.position.z = 100 - 1 - epsilon;
+		p.position.z = grid_size - 1 - epsilon;
 	}
 }
 
@@ -217,7 +219,7 @@ __global__ void gpu_step_fast(particle *particles, int *cell_starts, int *cell_e
 
 				int current_linear = linear_grid_index(current.x, current.y, current.z, grid_size);
 
-				for (int i = cell_starts[current_linear]; i < cell_ends[current_linear]; ++i) {
+				for (int i = cell_starts[current_linear]; i < cell_ends[current_linear] && i < cell_starts[current_linear] + MAX_PARTICLES; ++i) {
 
 					int particle_index = particle_ids_sorted[i];
 					if (particle_index == index) continue;
@@ -247,7 +249,7 @@ __global__ void gpu_step_fast(particle *particles, int *cell_starts, int *cell_e
 
 				int current_linear = linear_grid_index(current.x, current.y, current.z, grid_size);
 
-				for (int i = cell_starts[current_linear]; i < cell_ends[current_linear]; ++i) {
+				for (int i = cell_starts[current_linear]; i < cell_ends[current_linear] && i < cell_starts[current_linear] + MAX_PARTICLES; ++i) {
 
 					int particle_index = particle_ids_sorted[i];
 					if (particle_index == index) continue;
@@ -266,8 +268,13 @@ __global__ void gpu_step_fast(particle *particles, int *cell_starts, int *cell_e
 
 	// compute next velocity and set positions
 	particles[index].position += d_x;
+}
+
+__global__ void update_velocity(particle *particles, int particle_count, glm::vec3 *old_posis, float delta_time) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+	if (index >= particle_count) return;
+
 	particles[index].velocity = (particles[index].position - old_posis[index]) / delta_time;
-	// particles[index].color = glm::vec3(roh * 0.5);
 }
 
 __global__ void count_me(int *cell_starts, int *cell_ends, int particle_count) {
@@ -287,11 +294,11 @@ __global__ void apply_gravity(particle *particles, int particle_count, glm::vec3
 	particles[index].velocity += delta_time * gravity;
 }
 
-__global__ void dampen_all(particle *particles, int particle_count) {
+__global__ void dampen_all(particle *particles, int particle_count, float grid_size) {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	if (index >= particle_count) return;
 
-	dampen(particles[index]);
+	dampen(particles[index], grid_size);
 }
 
 __global__ void count_neighbours(particle *particles, int *cell_starts, int *cell_ends, int particle_count) {
@@ -299,75 +306,163 @@ __global__ void count_neighbours(particle *particles, int *cell_starts, int *cel
 	if (index >= particle_count) return;
 
 	int count = cell_ends[index] - cell_starts[index];
+
 	if (count > 50) {
 		printf("%d\n", count);
 	}
 }
 
-void cuda_fast_step(vector<particle> &particles, float cell_size, int grid_size, float delta_time, float h, 
-				float sigma, float beta, float k, float roh_0, float k_near, glm::vec3 gravity) {
 
-	int block_size = 256;
-	int num_blocks = (particles.size() + block_size - 1) / block_size;
+// limit the amount of springs per particle maybe only 2 or 3 per adjacent grid element?
+// create these and keep track of them, then update using them
+__global__ void create_springs(particle *particles, int particle_count, spring *springs, float cell_size, int grid_size, float alpha, float delta_t, float gamma, float h, float L_frac) {
+
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+	if (index >= particle_count) return;
+
+	int linear_index = compute_grid(particles[index], cell_size, grid_size);
+	int3 current_index = grid_index(linear_index, grid_size);
+
+	for (int x = -1; x < 2; ++x)
+		for (int y = -1; y < 2; ++y)
+			for (int z = -1; z < 2; ++z) {
+				
+			}
+
+	// //adjust springs
+	// for (int j = 0; j < positions.size(); ++j) {
+	// 	for (int i = 0; i < j; ++i) {
+
+	// 		auto distance = glm::length(positions[j] - positions[i]);
+	// 		float q = distance / h;
+
+	// 		if (q < 1) {
+
+	// 			auto spring = tuple(i, j);
+	// 			if (springs.find(spring) == springs.end()) {
+	// 				springs[spring] = h;
+	// 			}
+
+	// 			auto d = gama * springs[spring];
+
+	// 			if (glm::length(positions[j] - positions[i]) > L_frac + d) {
+	// 				springs[spring] += delta_t * alpha * (distance - L_frac - d);
+	// 			} else if (glm::length(positions[j] - positions[i]) < L_frac + d) {
+	// 				springs[spring] -= delta_t * alpha * (L_frac - d - distance);
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	// // spring deletion
+	// for (auto it = springs.cbegin(); it != springs.cend();) {
+	// 	if (it->second > h) {
+	// 		it = springs.erase(it);
+	// 	}
+	// }
+
+	// // spring adjustments
+	// for (auto [key, val] : springs) {
+	// 	auto r = positions[get<1>(key)] - positions[get<0>(key)];
+	// 	auto distance = glm::length(r);
+	// 	auto D = delta_t * delta_t * k_spring * (1 - val / h) * (val - distance) * glm::normalize(r);
+	// 	positions[get<0>(key)] -= D * 0.5f;
+	// 	positions[get<1>(key)] += D * 0.5f;
+	// }
+}
+
+__global__ void collisions(particle *particles, glm::vec3 *old_posis, int particle_count, float interaction_radius, float delta_time) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+	if (index >= particle_count) return;
+
+	particle &current = particles[index];
+
+	float radius = 20;
+	glm::vec3 circle(100, 100, 100);
+	float my = 0.225f;
+
+	glm::vec3 n = circle - current.position;
+	float dist = glm::length(n) - radius;
+
+	if (dist > interaction_radius) return;
+
+	n = glm::normalize(n);
+	glm::vec3 old = old_posis[index];
+	glm::vec3 v = current.position - old;
+
+	glm::vec3 v_normal = glm::dot(v, n) * n;
+	glm::vec3 v_tangent = v - v_normal;
+
+	glm::vec3 I = v_normal - my * v_tangent;
+
+	current.position -= delta_time * I;
+}
+
+static int *cell_ids;
+static int *particle_ids;
+static int *cell_ids_sorted;
+static int *particle_ids_sorted;
+static int *cell_starts;
+static int *cell_ends;
+static glm::vec3 *old_posis;
+static void *temp_storage;
+static size_t temp_storage_bytes;
+
+void init(int count, int grid_size) {
+
 	int grid_count = grid_size * grid_size * grid_size;
 
-	particle *particles_gpu;
-	CUDA_CHECK(cudaMalloc((void**)&particles_gpu, particles.size() * sizeof(particle)))
-	CUDA_CHECK(cudaMemcpy(particles_gpu, particles.data(), particles.size() * sizeof(particle), cudaMemcpyHostToDevice))
-
-	int *cell_ids;
-	CUDA_CHECK(cudaMalloc((void**)&cell_ids, particles.size() * sizeof(int)))
-	int *particle_ids;
-	CUDA_CHECK(cudaMalloc((void**)&particle_ids, particles.size() * sizeof(int)))
-	int *cell_ids_sorted;
-	CUDA_CHECK(cudaMalloc((void**)&cell_ids_sorted, particles.size() * sizeof(int)))
-	int *particle_ids_sorted;
-	CUDA_CHECK(cudaMalloc((void**)&particle_ids_sorted, particles.size() * sizeof(int)))
-
-	int *cell_starts;
+	CUDA_CHECK(cudaMalloc((void**)&cell_ids, count * sizeof(int)))
+	CUDA_CHECK(cudaMalloc((void**)&particle_ids, count * sizeof(int)))
+	CUDA_CHECK(cudaMalloc((void**)&cell_ids_sorted, count * sizeof(int)))
+	CUDA_CHECK(cudaMalloc((void**)&particle_ids_sorted, count * sizeof(int)))
+	
 	CUDA_CHECK(cudaMalloc((void**)&cell_starts, grid_count * sizeof(int)))
-	CUDA_CHECK(cudaMemset(cell_starts, -1, grid_count * sizeof(int)))
-	int *cell_ends;
 	CUDA_CHECK(cudaMalloc((void**)&cell_ends, grid_count * sizeof(int)))
-	CUDA_CHECK(cudaMemset(cell_ends, -1, grid_count * sizeof(int)))
 
-	glm::vec3 *old_posis;
-	CUDA_CHECK(cudaMalloc((void**)&old_posis, particles.size() * sizeof(glm::vec3)))
+	CUDA_CHECK(cudaMalloc((void**)&old_posis, count * sizeof(glm::vec3)))
+}
 
-	void *temp_storage = nullptr;
-	size_t temp_storage_bytes = 0;
-
-	bin_particles<<<num_blocks, block_size>>>(particles_gpu, particles.size(), cell_ids, particle_ids, cell_size, grid_size);
-
-	CUDA_CHECK(cub::DeviceRadixSort::SortPairs(temp_storage, temp_storage_bytes, cell_ids, cell_ids_sorted, particle_ids, particle_ids_sorted, particles.size()))
-	cudaMalloc(&temp_storage, temp_storage_bytes);
-	CUDA_CHECK(cub::DeviceRadixSort::SortPairs(temp_storage, temp_storage_bytes, cell_ids, cell_ids_sorted, particle_ids, particle_ids_sorted, particles.size()))
-	
-	find_cell_ranges<<<num_blocks, block_size>>>(cell_ids_sorted, particle_ids_sorted, cell_starts, cell_ends, particles.size());
-	
-	apply_gravity<<<num_blocks, block_size>>>(particles_gpu, particles.size(), gravity, delta_time);
-
-	viscosity<<<num_blocks, block_size>>>(particles_gpu, cell_starts, cell_ends, particle_ids_sorted, particles.size(), cell_size, grid_size, delta_time, sigma, beta, h);
-
-	slow_down<<<num_blocks, block_size>>>(particles_gpu, particles.size());
-
-	pos_update<<<num_blocks, block_size>>>(particles_gpu, particles.size(), old_posis, delta_time);
-	
-	gpu_step_fast<<<num_blocks, block_size>>>(particles_gpu, cell_starts, cell_ends, particle_ids_sorted, cell_size, grid_size, particles.size(), delta_time, h, k, roh_0, k_near, old_posis);
-
-	dampen_all<<<num_blocks, block_size>>>(particles_gpu, particles.size());
-
-	count_neighbours<<<num_blocks, block_size>>>(particles_gpu, cell_starts, cell_ends, particles.size());
-
-	CUDA_CHECK(cudaMemcpy(particles.data(), particles_gpu, particles.size() * sizeof(particle), cudaMemcpyDeviceToHost))
-
-	CUDA_CHECK(cudaFree(particles_gpu))
+void fin() {
 	CUDA_CHECK(cudaFree(cell_ids))
 	CUDA_CHECK(cudaFree(particle_ids))
-	CUDA_CHECK(cudaFree(temp_storage))
 	CUDA_CHECK(cudaFree(cell_ids_sorted))
 	CUDA_CHECK(cudaFree(particle_ids_sorted))
 	CUDA_CHECK(cudaFree(cell_starts))
 	CUDA_CHECK(cudaFree(cell_ends))
 	CUDA_CHECK(cudaFree(old_posis))
+}
+
+void cuda_fast_step(particle *device_pointer, vector<particle> &particles, float cell_size, int grid_size, float delta_time, float h, 
+				float sigma, float beta, float k, float roh_0, float k_near, glm::vec3 gravity, std::map<std::string, std::vector<float>> &times) {
+
+	int block_size = 256;
+	int num_blocks = (particles.size() + block_size - 1) / block_size;
+	int grid_count = grid_size * grid_size * grid_size;
+	
+	CUDA_CHECK(cudaMemset(cell_starts, -1, grid_count * sizeof(int)))
+	CUDA_CHECK(cudaMemset(cell_ends, -1, grid_count * sizeof(int)))
+
+	// spring *springs;
+	// CUDA_CHECK(cudaMalloc((void**)&springs, particles.size() * sizeof(spring)))
+
+	CUDA_TIME((bin_particles<<<num_blocks, block_size>>>(device_pointer, particles.size(), cell_ids, particle_ids, cell_size, grid_size)), "binning");
+	CUDA_TIME(cub::DeviceRadixSort::SortPairs(temp_storage, temp_storage_bytes, cell_ids, cell_ids_sorted, particle_ids, particle_ids_sorted, particles.size()), "sort 1");
+	cudaMalloc(&temp_storage, temp_storage_bytes);
+	CUDA_TIME(cub::DeviceRadixSort::SortPairs(temp_storage, temp_storage_bytes, cell_ids, cell_ids_sorted, particle_ids, particle_ids_sorted, particles.size()), "sort 2");
+	CUDA_CHECK(cudaFree(temp_storage))
+
+	CUDA_TIME((find_cell_ranges<<<num_blocks, block_size>>>(cell_ids_sorted, particle_ids_sorted, cell_starts, cell_ends, particles.size())), "cell ranges");
+	CUDA_TIME((apply_gravity<<<num_blocks, block_size>>>(device_pointer, particles.size(), gravity, delta_time)), "gravity");
+	CUDA_TIME((viscosity<<<num_blocks, block_size>>>(device_pointer, cell_starts, cell_ends, particle_ids_sorted, particles.size(), cell_size, grid_size, delta_time, sigma, beta, h)), "viscosity");
+	CUDA_TIME((slow_down<<<num_blocks, block_size>>>(device_pointer, particles.size())), "slow down");
+	CUDA_TIME((pos_update<<<num_blocks, block_size>>>(device_pointer, particles.size(), old_posis, delta_time)), "pos update");
+	CUDA_TIME((gpu_step_fast<<<num_blocks, block_size>>>(device_pointer, cell_starts, cell_ends, particle_ids_sorted, cell_size, grid_size, particles.size(), delta_time, h, k, roh_0, k_near, old_posis)), "step");
+	CUDA_TIME((collisions<<<num_blocks, block_size>>>(device_pointer, old_posis, particles.size(), h, delta_time)), "collisions");
+	CUDA_TIME((update_velocity<<<num_blocks, block_size>>>(device_pointer, particles.size(), old_posis, delta_time)), "update velocity");
+	CUDA_TIME((slow_down<<<num_blocks, block_size>>>(device_pointer, particles.size())), "slow");
+	CUDA_TIME((dampen_all<<<num_blocks, block_size>>>(device_pointer, particles.size(), grid_size)), "dampen");
+	// count_neighbours<<<num_blocks, block_size>>>(device_pointer, cell_starts, cell_ends, particles.size());
+
+	// CUDA_CHECK(cudaFree(springs))
 }

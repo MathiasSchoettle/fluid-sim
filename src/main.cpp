@@ -20,10 +20,11 @@
 using namespace std;
 using namespace std::chrono;
 
-int width = 1280, height = 720;
-float n = 0.1, f = 250;
+int width = 1920, height = 1080;
+float n = 0.1, f = 400;
 float EPSILON_MULT = 0.5;
-bool draw_box = false;
+bool draw_box = true;
+int grid_size = 200;
 
 GLuint g_buffer;
 GLuint g_norm, g_col, g_depth;
@@ -71,6 +72,9 @@ int main(int argc, char** argv) {
 	params.title = "HSP";
 	params.font_ttf_filename = "render-data/fonts/DroidSansMono.ttf";
 	params.font_size_pixels = 15;
+	params.resizable = false;
+	params.width = width;
+	params.height = height;
 	Context::init(params);
 
 	auto cam = make_camera("cam");
@@ -87,7 +91,6 @@ int main(int argc, char** argv) {
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
 
-
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_ONE, GL_ONE);
 
@@ -96,9 +99,9 @@ int main(int argc, char** argv) {
 	shader_ptr shader_quad = make_shader("quad", "shaders/quad.vert", "shaders/quad.frag");
 	shader_ptr shader_box = make_shader("box", "shaders/box.vert", "shaders/box.frag");
 
-	simulation sim;
+	simulation sim(grid_size);
 	quad quad;
-	box box;
+	box box(grid_size);
 
 	glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
 	glPointParameteri(GL_POINT_SPRITE_COORD_ORIGIN, GL_LOWER_LEFT);
@@ -123,13 +126,23 @@ int main(int argc, char** argv) {
 
 		ImGui::Text("Pos: (%f, %f %f)", cam->pos.x, cam->pos.y, cam->pos.z);
 		ImGui::Text("Dir: (%f, %f %f)", cam->dir.x, cam->dir.y, cam->dir.z);
-		
+
+		ImGui::Separator();
+		float sum = 0;
+		for (auto [name, time] : sim.times) {
+			float current = time[time.size() - 1];
+			sum += current;
+			ImGui::TextColored((current > 4 ? ImVec4(1, 0, 0, 1) : ImVec4(1, 1, 1, 1)), "%s: %f", name.c_str(), current);
+		}
+
+		ImGui::Separator();
+		ImGui::Text("SUM: %f", sum);
 		ImGui::Separator();
 
 		ImGui::Text("Density relaxation");
 		ImGui::SliderFloat("k", &sim.k, 0.001, 2);
-		ImGui::SliderFloat("k near", &sim.k_near, 0.1, 30);
-		ImGui::SliderFloat("roh", &sim.roh_0, 1, 15);
+		ImGui::SliderFloat("k near", &sim.k_near, 0.1, 40);
+		ImGui::SliderFloat("roh", &sim.roh_0, 1, 45);
 		
 		ImGui::Separator();
 		
@@ -137,6 +150,9 @@ int main(int argc, char** argv) {
 		ImGui::SliderFloat("sigma", &sim.sigma, 0.0, 20.0);
 		ImGui::SliderFloat("beta", &sim.beta, 0.0, 20.0);
 		ImGui::SliderFloat3("gravity", &sim.gravity.x, -9.81, 9.81);
+
+		ImGui::Separator();
+		ImGui::SliderFloat("render size", &sim.particle_render_factor, 0.5f, 3.0f);
 
 		if (ImGui::Button("Gravity reset")) {
 			sim.gravity = glm::vec3(0);
@@ -155,7 +171,7 @@ int main(int argc, char** argv) {
 
 		sim.step();
 
-		float sprite_size = sim.particle_diameter * 1.5f;
+		float sprite_size = sim.particle_diameter * sim.particle_render_factor;
 
 		shader_depth->bind();
 		shader_depth->uniform("view", cam->view);
@@ -177,6 +193,14 @@ int main(int argc, char** argv) {
 
 		sim.draw();
 
+		shader_box->bind();
+		shader_box->uniform("view", cam->view);
+		shader_box->uniform("proj", cam->proj);
+
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+		if (draw_box) box.draw();
+
 		shader_attribs->bind();
 		shader_attribs->uniform("view", cam->view);
 		shader_attribs->uniform("proj", cam->proj);
@@ -188,24 +212,13 @@ int main(int argc, char** argv) {
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, g_depth);
-		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 		glDepthMask(GL_FALSE);
 		glEnable(GL_BLEND);
 		glDisable(GL_DEPTH_TEST);
 		
 		sim.draw();
 
-		shader_box->bind();
-		shader_box->uniform("view", cam->view);
-		shader_box->uniform("proj", cam->proj);
-
-		glDepthMask(GL_TRUE);
-		glDisable(GL_BLEND);
-
-		if (draw_box) box.draw();
-
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		shader_quad->bind();
@@ -233,8 +246,6 @@ int main(int argc, char** argv) {
 		quad.draw();
 
 		Context::swap_buffers();
-
-		// return 0;
 	}
 
 	return 0;
