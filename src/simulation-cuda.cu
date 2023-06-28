@@ -8,49 +8,32 @@ using namespace std;
 
 #define MAX_PARTICLES 10
 
-#define CC
-
-#ifdef CC
-
-#define CUDA_CHECK(call)                                                      \
-{                                                                             \
-	const cudaError_t error = call;                                            \
-	if (error != cudaSuccess)                                                  \
-	{                                                                         \
-		std::cerr << "CUDA error occurred: " << cudaGetErrorString(error) <<  \
-			" at line " << __LINE__ << std::endl;                              \
-		exit(1);                                                              \
-	}                                                                         \
+#define CUDA_CHECK(call)\
+{\
+	const cudaError_t error = call;\
+	if (error != cudaSuccess)\
+	{\
+		std::cerr << "CUDA error occurred: " << cudaGetErrorString(error) << " at line " << __LINE__ << std::endl;\
+		exit(1);\
+	}\
 }
 
 #define CUDA_TIME(call, name) \
 { \
-    cudaEvent_t start, end; \
-    cudaEventCreate(&start); \
-    cudaEventCreate(&end); \
-    \
-    cudaEventRecord(start); \
-    \
-    call; \
-    \
-    cudaEventRecord(end); \
-    cudaEventSynchronize(end); \
-    \
+	cudaEvent_t start, end; \
+	cudaEventCreate(&start); \
+	cudaEventCreate(&end); \
+	cudaEventRecord(start); \
+	call; \
+	cudaEventRecord(end); \
+	cudaEventSynchronize(end); \
 	float time = 0; \
-    cudaEventElapsedTime(&time, start, end); \
+	cudaEventElapsedTime(&time, start, end); \
 	if (times[name].size() > MAX_TIMES) times[name].pop_back(); \
 	times[name].insert(times[name].begin(), time); \
-    \
-    cudaEventDestroy(start); \
-    cudaEventDestroy(end); \
+	cudaEventDestroy(start); \
+	cudaEventDestroy(end); \
 }
-
-#else
-
-#define CUDA_CHECK(call) call;
-#define CUDA_TIME(call) call;
-
-#endif
 
 __device__ __forceinline__ int linear_grid_index(int x, int y, int z, const int grid_size) {
 	return x + y * grid_size + z * grid_size * grid_size;
@@ -71,7 +54,6 @@ __device__ int compute_grid(particle p, float cell_size, int grid_size) {
 	return linear_grid_index(x, y, z, grid_size);
 }
 
-// TODO strided not single thread for each particle
 __global__ void bin_particles(particle *particles, int particle_count, int *cell_ids, int *particle_ids, float cell_size, int grid_size) {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	if (index >= particle_count) return;
@@ -443,12 +425,9 @@ void cuda_fast_step(particle *device_pointer, vector<particle> &particles, float
 	CUDA_CHECK(cudaMemset(cell_starts, -1, grid_count * sizeof(int)))
 	CUDA_CHECK(cudaMemset(cell_ends, -1, grid_count * sizeof(int)))
 
-	// spring *springs;
-	// CUDA_CHECK(cudaMalloc((void**)&springs, particles.size() * sizeof(spring)))
-
 	CUDA_TIME((bin_particles<<<num_blocks, block_size>>>(device_pointer, particles.size(), cell_ids, particle_ids, cell_size, grid_size)), "binning");
 	CUDA_TIME(cub::DeviceRadixSort::SortPairs(temp_storage, temp_storage_bytes, cell_ids, cell_ids_sorted, particle_ids, particle_ids_sorted, particles.size()), "sort 1");
-	cudaMalloc(&temp_storage, temp_storage_bytes);
+	CUDA_CHECK(cudaMalloc(&temp_storage, temp_storage_bytes));
 	CUDA_TIME(cub::DeviceRadixSort::SortPairs(temp_storage, temp_storage_bytes, cell_ids, cell_ids_sorted, particle_ids, particle_ids_sorted, particles.size()), "sort 2");
 	CUDA_CHECK(cudaFree(temp_storage))
 
@@ -462,7 +441,4 @@ void cuda_fast_step(particle *device_pointer, vector<particle> &particles, float
 	CUDA_TIME((update_velocity<<<num_blocks, block_size>>>(device_pointer, particles.size(), old_posis, delta_time)), "update velocity");
 	CUDA_TIME((slow_down<<<num_blocks, block_size>>>(device_pointer, particles.size())), "slow");
 	CUDA_TIME((dampen_all<<<num_blocks, block_size>>>(device_pointer, particles.size(), grid_size)), "dampen");
-	// count_neighbours<<<num_blocks, block_size>>>(device_pointer, cell_starts, cell_ends, particles.size());
-
-	// CUDA_CHECK(cudaFree(springs))
 }

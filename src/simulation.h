@@ -39,7 +39,7 @@ public:
 	glm::vec3 gravity = glm::vec3(0, -0.25f, 0);
 	int particle_count;
 	// pressure params
-	float k = 0.2, k_near = 40.0, roh_0 = 12.0;
+	float k = 0.4, k_near = 40.0, roh_0 = 20.0;
 	// viscosity params
 	float sigma = 15.0, beta = 7.5;
 	// spring params - not yet used
