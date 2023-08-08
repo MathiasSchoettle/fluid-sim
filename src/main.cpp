@@ -109,6 +109,7 @@ int main(int argc, char** argv) {
 	setup_g_buffer();
 
 	static int count = 0;
+	glfwSwapInterval(0);
 
 	while (Context::running()) {
 		Camera::default_input_handler(Context::frame_time());

@@ -2,7 +2,7 @@
 NVCC = nvcc
 
 # Compiler flags
-NVCCFLAGS = -arch=sm_89 -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored -O3
+NVCCFLAGS = -arch=sm_89 -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored -O3 --use_fast_math --keep --resource-usage
 
 # Libraries
 LDLIBS = -lbigduckgl -limgui -lGLEW -lglfw -lGL -lassimp

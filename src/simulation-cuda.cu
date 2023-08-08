@@ -4,6 +4,64 @@
 #include <chrono>
 #include <cub/cub.cuh> 
 
+__device__ __inline__ float2 operator*(float l, const float2 &r) { return { l*r.x, l*r.y }; }
+__device__ __inline__ float2 operator*(const float2 &l, float r) { return { l.x*r, l.y*r }; }
+__device__ __inline__ float2 operator*(const float2 &l, const float2 &r) { return { l.x*r.x, l.y*r.y }; }
+
+__device__ __inline__ float2 operator+(const float2 &l, const float2 &r) { return { l.x+r.x, l.y+r.y }; }
+
+__device__ __inline__ float3 operator*(float l, const float3 &r) { return { l*r.x, l*r.y, l*r.z }; }
+__device__ __inline__ float3 operator*(const float3 &l, float r) { return { l.x*r, l.y*r, l.z*r }; }
+__device__ __inline__ float3 operator*(const float3 &l, const float3 &r) { return { l.x*r.x, l.y*r.y, l.z*r.z }; }
+
+__device__ __inline__ float3& operator*=(float3 &l, const float &r) { l.x*=r, l.y*=r, l.z*=r; return l; }
+__device__ __inline__ float3& operator+=(float3 &l, const float3 &r) { l.x+=r.x, l.y+=r.y, l.z+=r.z; return l; }
+
+__device__ __inline__ float3 operator/(const float3 &l, float r) { return { l.x/r, l.y/r, l.z/r }; }
+__device__ __inline__ float3 operator/=(float3 &l, float r) { return { l.x/=r, l.y/=r, l.z/=r }; }
+
+__device__ __inline__ float3 operator+(const float3 &l, const float3 &r) { return { l.x+r.x, l.y+r.y, l.z+r.z }; }
+__device__ __inline__ float3 operator-(const float3 &l, const float3 &r) { return { l.x-r.x, l.y-r.y, l.z-r.z }; }
+__device__ __inline__ float3 operator-(const float3 &l) { return { -l.x, -l.y, -l.z }; }
+
+__device__ __inline__ float4 operator+(const float4 &l, const float4 &r) { return { l.x+r.x, l.y+r.y, l.z+r.z, l.w+r.w }; }
+__device__ __inline__ float4 operator-(const float4 &l, const float4 &r) { return { l.x-r.x, l.y-r.y, l.z-r.z, l.w-r.w }; }
+__device__ __inline__ float4& operator+=(float4 &l, const float4 &r) { l.x+=r.x, l.y+=r.y, l.z+=r.z, l.w+=r.w; return l; }
+
+__device__ __inline__ float4 operator*(float l, const float4 &r) { return { l*r.x, l*r.y, l*r.z, l*r.w }; }
+__device__ __inline__ float4 operator*(const float4 &l, float r) { return { l.x*r, l.y*r, l.z*r, l.w*r }; }
+__device__ __inline__ float4 operator*(const float4 &l, const float4 &r) { return { l.x*r.x, l.y*r.y, l.z*r.z, l.w*r.w }; }
+
+__device__ __forceinline__ float3 float4to3(const float4 &value) { return make_float3(value.x, value.y, value.z); }
+__device__ __forceinline__ float4 float3to4(const float3 &value) { return make_float4(value.x, value.y, value.z, 0); }
+
+__forceinline__ __device__ float length(const float3 &v) {
+	return sqrtf(v.x*v.x + v.y*v.y + v.z*v.z);
+}
+
+__forceinline__ __device__ void normalize(float3 &v) {
+    float inv_len = rsqrtf(v.x*v.x + v.y*v.y + v.z*v.z);
+    v.x = v.x * inv_len;
+    v.y = v.y * inv_len;
+    v.z = v.z * inv_len;
+}
+
+__forceinline__ __device__ __host__ float dot(const float3 &a, const float3 &b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+__forceinline__ __device__ __host__ void cross(float3 &dest, const float3 &a, const float3 &b) {
+    dest.x = a.y*b.z - a.z*b.y;
+    dest.y = a.z*b.x - a.x*b.z;
+    dest.z =  a.x*b.y - a.y*b.x;
+}
+
+__forceinline__  __device__ __host__ float3 cross(const float3 &a, const float3 &b) {
+    return make_float3(a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x);
+}
+
+
+
 using namespace std;
 
 #define MAX_PARTICLES 10
@@ -39,7 +97,7 @@ __device__ __forceinline__ int linear_grid_index(int x, int y, int z, const int 
 	return x + y * grid_size + z * grid_size * grid_size;
 }
 
-__device__ int3 grid_index(int linear_index, const int grid_size) {
+__device__ __forceinline__ int3 grid_index(int linear_index, const int grid_size) {
 	int z = linear_index / (grid_size * grid_size);
 	linear_index -= z * (grid_size * grid_size);
 	int y = linear_index / grid_size;
@@ -47,10 +105,17 @@ __device__ int3 grid_index(int linear_index, const int grid_size) {
 	return make_int3(linear_index, y, z);
 }
 
-__device__ int compute_grid(particle p, float cell_size, int grid_size) {
-	int x = p.position.x / cell_size;
-	int y = p.position.y / cell_size;
-	int z = p.position.z / cell_size;
+__device__ __forceinline__ int compute_grid(const float3 &pos, float cell_size, int grid_size) {
+	int x = pos.x / cell_size;
+	int y = pos.y / cell_size;
+	int z = pos.z / cell_size;
+	return linear_grid_index(x, y, z, grid_size);
+}
+
+__device__ __forceinline__ int compute_grid(const particle &particle, float cell_size, int grid_size) {
+	int x = particle.position.x / cell_size;
+	int y = particle.position.y / cell_size;
+	int z = particle.position.z / cell_size;
 	return linear_grid_index(x, y, z, grid_size);
 }
 
@@ -60,7 +125,7 @@ __global__ void bin_particles(particle *particles, int particle_count, int *cell
 
 	cell_ids[index] = compute_grid(particles[index], cell_size, grid_size);
 	particle_ids[index] = index;
-}	
+}
 
 __global__ void find_cell_ranges(int *cell_ids, int *particle_ids, int *cell_starts, int *cell_ends, int particle_count) {
 
@@ -84,42 +149,99 @@ __global__ void find_cell_ranges(int *cell_ids, int *particle_ids, int *cell_sta
 	}
 }
 
-__global__ void viscosity(particle *particles, int *cell_starts, int *cell_ends, int *particle_ids_sorted, int particle_count, float cell_size, int grid_size, float delta_time, float sigma, float beta, float h) {
+__global__ void viscosity_different(float4 *posis, float4 *velosis, const int *cell_starts, const int *cell_ends, const int *particle_ids_sorted, int particle_count, float cell_size, int grid_size, float delta_time, float sigma, float beta, float h) {
+	for (int index = blockIdx.x * blockDim.x + threadIdx.x; index < particle_count; index += blockDim.x * gridDim.x) {
+		const float3 position = float4to3(posis[index]);
+		const float3 velocity = float4to3(velosis[index]);
+		const int linear_index = compute_grid(position, cell_size, grid_size);
+		const int3 current_index = grid_index(linear_index, grid_size);
+
+		for (int x = -1; x < 2; ++x)
+			for (int y = -1; y < 2; ++y)
+				for (int z = -1; z < 2; ++z) {
+
+					const int3 current = make_int3(current_index.x + x, current_index.y + y, current_index.z + z);
+
+					if (current.x < 0 || current.x > grid_size - 1) continue;
+					if (current.y < 0 || current.y > grid_size - 1) continue;
+					if (current.z < 0 || current.z > grid_size - 1) continue;
+
+					const int current_linear = linear_grid_index(current.x, current.y, current.z, grid_size);
+
+					const int cell_start = cell_starts[current_linear];
+					const int cell_end = cell_ends[current_linear];
+
+					// viscosity over neighbours
+					for (int i = cell_start; i < cell_end && i < cell_start + MAX_PARTICLES; ++i) {
+
+						const int particle_index = particle_ids_sorted[i];
+						if (particle_index > index) continue;
+
+						const float3 other_pos = float4to3(posis[particle_index]);
+						auto pos_diff = other_pos - position;
+						const float q = length(pos_diff) / h;
+						
+						if (q < 1) {
+							const float3 other_velocity = float4to3(velosis[particle_index]);
+							const auto u = dot((velocity - other_velocity), pos_diff);
+							
+							if (u > 0) {
+								normalize(pos_diff);
+								auto I = delta_time * (1.0f - q) * (sigma * u + beta * u * u) * pos_diff;
+								I *= 0.5f;
+								velosis[index] = velosis[index] - float3to4(I);
+								velosis[particle_index] = velosis[particle_index] + float3to4(I);
+							}
+						}
+					}
+				}
+	}
+}
+
+__global__ void viscosity(float4 *posis, float4 *velosis, const int *cell_starts, const int *cell_ends, const int *particle_ids_sorted, int particle_count, float cell_size, int grid_size, float delta_time, float sigma, float beta, float h) {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	if (index >= particle_count) return;
 
-	int linear_index = compute_grid(particles[index], cell_size, grid_size);
-	int3 current_index = grid_index(linear_index, grid_size);
+	const float3 position = float4to3(posis[index]);
+	const float3 velocity = float4to3(velosis[index]);
+	const int linear_index = compute_grid(position, cell_size, grid_size);
+	const int3 current_index = grid_index(linear_index, grid_size);
 
 	for (int x = -1; x < 2; ++x)
 		for (int y = -1; y < 2; ++y)
 			for (int z = -1; z < 2; ++z) {
 
-				int3 current = make_int3(current_index.x + x, current_index.y + y, current_index.z + z);
+				const int3 current = make_int3(current_index.x + x, current_index.y + y, current_index.z + z);
 
 				if (current.x < 0 || current.x > grid_size - 1) continue;
 				if (current.y < 0 || current.y > grid_size - 1) continue;
 				if (current.z < 0 || current.z > grid_size - 1) continue;
 
-				int current_linear = linear_grid_index(current.x, current.y, current.z, grid_size);
+				const int current_linear = linear_grid_index(current.x, current.y, current.z, grid_size);
+
+				const int cell_start = cell_starts[current_linear];
+				const int cell_end = cell_ends[current_linear];
 
 				// viscosity over neighbours
-				for (int i = cell_starts[current_linear]; i < cell_ends[current_linear] && i < cell_starts[current_linear] + MAX_PARTICLES; ++i) {
+				for (int i = cell_start; i < cell_end && i < cell_start + MAX_PARTICLES; ++i) {
 
-					int particle_index = particle_ids_sorted[i];
+					const int particle_index = particle_ids_sorted[i];
 					if (particle_index > index) continue;
 
-					auto pos_diff = particles[particle_index].position - particles[index].position;
-					float q = glm::length(pos_diff) / h;
-
+					const float3 other_pos = float4to3(posis[particle_index]);
+					auto pos_diff = other_pos - position;
+					const float q = length(pos_diff) / h;
+					
 					if (q < 1) {
-						auto u = glm::dot((particles[index].velocity - particles[particle_index].velocity), pos_diff);
+						const float3 other_velocity = float4to3(velosis[particle_index]);
+						const auto u = dot((velocity - other_velocity), pos_diff);
 						
 						if (u > 0) {
-							auto I = delta_time * (1.0f - q) * (sigma * u + beta * u * u) * glm::normalize(pos_diff);
+							normalize(pos_diff);
+							auto I = delta_time * (1.0f - q) * (sigma * u + beta * u * u) * pos_diff;
 							I *= 0.5f;
-							particles[index].velocity -= I;
-							particles[particle_index].velocity += I;
+							velosis[index] = velosis[index] - float3to4(I);
+							velosis[particle_index] = velosis[particle_index] + float3to4(I);
 						}
 					}
 				}
@@ -175,12 +297,13 @@ __global__ void pos_update(particle *particles, int particle_count, glm::vec3 *o
 
 	old_posis[index] = particles[index].position;
 	particles[index].position += delta_time * particles[index].velocity;
-}	
+}
 
 __global__ void gpu_step_fast(particle *particles, int *cell_starts, int *cell_ends, int *particle_ids_sorted, float cell_size, int grid_size, int particle_count, float delta_time, float h, float k, float roh_0, float k_near, glm::vec3 *old_posis) {
 
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	if (index >= particle_count) return;
+
 
 	int linear_index = compute_grid(particles[index], cell_size, grid_size);
 	int3 current_index = grid_index(linear_index, grid_size);
@@ -361,7 +484,7 @@ __global__ void collisions(particle *particles, glm::vec3 *old_posis, int partic
 
 	float radius = 20;
 	glm::vec3 circle(100, 100, 100);
-	float my = 0.225f;
+	float my = 0.025f;
 
 	glm::vec3 n = circle - current.position;
 	float dist = glm::length(n) - radius;
@@ -415,7 +538,7 @@ void fin() {
 	CUDA_CHECK(cudaFree(old_posis))
 }
 
-void cuda_fast_step(particle *device_pointer, vector<particle> &particles, float cell_size, int grid_size, float delta_time, float h, 
+void cuda_fast_step(particle *device_pointer, vector<particle> &particles, float cell_size, int grid_size, float delta_time, float h,
 				float sigma, float beta, float k, float roh_0, float k_near, glm::vec3 gravity, std::map<std::string, std::vector<float>> &times) {
 
 	int block_size = 256;
@@ -425,6 +548,25 @@ void cuda_fast_step(particle *device_pointer, vector<particle> &particles, float
 	CUDA_CHECK(cudaMemset(cell_starts, -1, grid_count * sizeof(int)))
 	CUDA_CHECK(cudaMemset(cell_ends, -1, grid_count * sizeof(int)))
 
+	std::vector<particle> p(particles.size());
+	cudaMemcpy(p.data(), device_pointer, particles.size() * sizeof(particles), cudaMemcpyDeviceToHost);
+
+	vector<float4> posis;
+	vector<float4> velosis;
+
+	for (auto part : p) {
+		velosis.push_back(make_float4(part.velocity.x, part.velocity.y,part.velocity.z, 0));
+		posis.push_back(make_float4(part.position.x, part.position.y,part.position.z, 0));
+	}
+
+	float4 *cuda_posis;
+	float4 *cuda_velosis;
+	cudaMalloc(&cuda_posis, particles.size() * sizeof(float4));
+	cudaMalloc(&cuda_velosis, particles.size() * sizeof(float4));
+
+	cudaMemcpy(cuda_posis, posis.data(), particles.size() * sizeof(float4), cudaMemcpyHostToDevice);
+	cudaMemcpy(cuda_posis, posis.data(), particles.size() * sizeof(float4), cudaMemcpyHostToDevice);
+
 	CUDA_TIME((bin_particles<<<num_blocks, block_size>>>(device_pointer, particles.size(), cell_ids, particle_ids, cell_size, grid_size)), "binning");
 	CUDA_TIME(cub::DeviceRadixSort::SortPairs(temp_storage, temp_storage_bytes, cell_ids, cell_ids_sorted, particle_ids, particle_ids_sorted, particles.size()), "sort 1");
 	CUDA_CHECK(cudaMalloc(&temp_storage, temp_storage_bytes));
@@ -433,10 +575,36 @@ void cuda_fast_step(particle *device_pointer, vector<particle> &particles, float
 
 	CUDA_TIME((find_cell_ranges<<<num_blocks, block_size>>>(cell_ids_sorted, particle_ids_sorted, cell_starts, cell_ends, particles.size())), "cell ranges");
 	CUDA_TIME((apply_gravity<<<num_blocks, block_size>>>(device_pointer, particles.size(), gravity, delta_time)), "gravity");
-	CUDA_TIME((viscosity<<<num_blocks, block_size>>>(device_pointer, cell_starts, cell_ends, particle_ids_sorted, particles.size(), cell_size, grid_size, delta_time, sigma, beta, h)), "viscosity");
-	CUDA_TIME((slow_down<<<num_blocks, block_size>>>(device_pointer, particles.size())), "slow down");
+
+	// slow
+	// CUDA_TIME((viscosity<<<num_blocks, block_size>>>(cuda_posis, cuda_velosis, cell_starts, cell_ends, particle_ids_sorted, particles.size(), cell_size, grid_size, delta_time, sigma, beta, h)), "viscosity");
+
+	int blocks, threads;
+	cudaOccupancyMaxPotentialBlockSize(&blocks, &threads, viscosity_different);
+	CUDA_TIME((viscosity_different<<<blocks, threads>>>(cuda_posis, cuda_velosis, cell_starts, cell_ends, particle_ids_sorted, particles.size(), cell_size, grid_size, delta_time, sigma, beta, h)), "viscosity");
+
+	CUDA_CHECK(cudaDeviceSynchronize());
+
+	cudaMemcpy(posis.data(), cuda_posis, particles.size() * sizeof(float4), cudaMemcpyDeviceToHost);
+	cudaMemcpy(velosis.data(), cuda_velosis, particles.size() * sizeof(float4), cudaMemcpyDeviceToHost);
+
+	for (int i = 0; i < particles.size(); ++i) {
+		auto pos = posis[i];
+		auto vel = velosis[i];
+		p[i].position = glm::vec3(pos.x, pos.y, pos.z);
+		p[i].velocity = glm::vec3(vel.x, vel.y, vel.z);
+	}
+
+	cudaMemcpy(device_pointer, p.data(), particles.size() * sizeof(particles), cudaMemcpyHostToDevice);
+
+	CUDA_CHECK(cudaFree(cuda_posis));
+	CUDA_CHECK(cudaFree(cuda_velosis));
+
 	CUDA_TIME((pos_update<<<num_blocks, block_size>>>(device_pointer, particles.size(), old_posis, delta_time)), "pos update");
+
+	// even slower	
 	CUDA_TIME((gpu_step_fast<<<num_blocks, block_size>>>(device_pointer, cell_starts, cell_ends, particle_ids_sorted, cell_size, grid_size, particles.size(), delta_time, h, k, roh_0, k_near, old_posis)), "step");
+
 	CUDA_TIME((collisions<<<num_blocks, block_size>>>(device_pointer, old_posis, particles.size(), h, delta_time)), "collisions");
 	CUDA_TIME((update_velocity<<<num_blocks, block_size>>>(device_pointer, particles.size(), old_posis, delta_time)), "update velocity");
 	CUDA_TIME((slow_down<<<num_blocks, block_size>>>(device_pointer, particles.size())), "slow");
