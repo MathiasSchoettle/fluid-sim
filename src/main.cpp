@@ -108,6 +108,8 @@ int main(int argc, char** argv) {
 
 	setup_g_buffer();
 
+	glfwSwapInterval(0);
+
 	static int count = 0;
 
 	while (Context::running()) {

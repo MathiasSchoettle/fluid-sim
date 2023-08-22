@@ -8,6 +8,8 @@
 	}\
 }
 
+// #define CUDA_TIME(call, name) call;
+
 #define CUDA_TIME(call, name) \
 { \
 	cudaEvent_t start, end; \
@@ -66,6 +68,14 @@ __forceinline__ __device__ void normalize(float3 &v) {
 	v.x = v.x * inv_len;
 	v.y = v.y * inv_len;
 	v.z = v.z * inv_len;
+}
+
+__forceinline__ __device__ void normalize(float4 &v) {
+	float inv_len = rsqrtf(v.x*v.x + v.y*v.y + v.z*v.z + v.w*v.w);
+	v.x = v.x * inv_len;
+	v.y = v.y * inv_len;
+	v.z = v.z * inv_len;
+	v.w = v.w * inv_len;
 }
 
 __forceinline__ __device__ __host__ float dot(const float3 &a, const float3 &b) {

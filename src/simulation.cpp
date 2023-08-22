@@ -62,7 +62,7 @@ float get_rand() {
 	return static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
 }
 
-void add_circle(std::vector<particle> &particles, int radius, float4 pos, float4 color, float particle_diameter, float grid_size) {
+void add_circle(std::vector<particle> &particles, int radius, float4 pos, glm::vec3 color, float particle_diameter, float grid_size) {
 	float mult = 0.75 * particle_diameter;
 
 	for (int x = -radius; x < radius; ++x)
@@ -72,13 +72,13 @@ void add_circle(std::vector<particle> &particles, int radius, float4 pos, float4
 				particle p;
 				p.position = float4 {x * mult + pos.x, y * mult + pos.y, z * mult + pos.z, 1.0f};
 
-				// float4 diff = p.position - pos;
+				float4 diff = float4 {p.position.x - pos.x, p.position.y - pos.y, p.position.z - pos.z, p.position.w - pos.w};
 
-				// if (sqrt(diff.x*diff.x + diff.y*diff.y + diff.z*diff.z))
-				// 	continue;
+				if (sqrt(diff.x*diff.x + diff.y*diff.y + diff.z*diff.z) > radius * mult)
+					continue;
 
 				p.velocity = float4 {0, 0, 0, 0};
-				p.color = color;
+				p.color = float4 {color.x / 255.0f, color.y / 255.0f, color.z / 255.0f, 0.0f};
 				particles.push_back(p);
 			}
 }
@@ -86,12 +86,12 @@ void add_circle(std::vector<particle> &particles, int radius, float4 pos, float4
 void simulation::set_data() {
 	particles.clear();
 
-	add_circle(particles, 20, float4 {30.f, 55.f, 165.f, 0.f}, float4 {0.6f, 0.6f, 0.6f, 1.0f}, particle_diameter, grid_size);
-	add_circle(particles, 20, float4 {160.f, 30.f, 20.f, 0.f}, float4 {0.6f, 0.6f, 0.6f, 1.0f}, particle_diameter, grid_size);
-	add_circle(particles, 20, float4 {170.f, 35.f, 160.f, 0.f}, float4 {0.2f, 0.9f, 0.9f, 1.0f}, particle_diameter, grid_size);
-	add_circle(particles, 20, float4 {40.f, 70.f, 30.f, 0.f}, float4 {0.2f, 0.4f, 0.3f, 1.0f}, particle_diameter, grid_size);
+	add_circle(particles, 25, float4 {30.f, 55.f, 165.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
+	add_circle(particles, 25, float4 {160.f, 30.f, 20.f, 0.f}, glm::vec3(1, 144, 105), particle_diameter, grid_size);
+	add_circle(particles, 25, float4 {170.f, 35.f, 160.f, 0.f}, glm::vec3(1, 144, 105), particle_diameter, grid_size);
+	add_circle(particles, 25, float4 {40.f, 70.f, 30.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
 
-	add_circle(particles, 25, float4{110.f, 170.f, 100.f, 0.f}, float4{0.2f, 0.2f, 0.2f, 1.0f}, particle_diameter, grid_size);
+	add_circle(particles, 25, float4{110.f, 170.f, 100.f, 0.f}, glm::vec3(123, 220, 230), particle_diameter, grid_size);
 
 	// shuffle so updates are more random
 	auto rng = std::default_random_engine {};
