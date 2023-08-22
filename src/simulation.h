@@ -7,6 +7,8 @@
 #include <chrono>
 #include <bigduckgl/bigduckgl.h>
 #include <cuda_gl_interop.h>
+#include <cuda.h>
+#include <cuda_runtime.h>
 
 #define TIME(func) \
 { \
@@ -20,9 +22,9 @@
 #define MAX_TIMES 100
 
 struct particle {
-	glm::vec3 position;
-	glm::vec3 velocity;
-	glm::vec3 color;
+	float4 position;
+	float4 velocity;
+	float4 color;
 };
 
 class simulation {

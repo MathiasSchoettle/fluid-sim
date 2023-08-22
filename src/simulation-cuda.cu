@@ -1,4 +1,5 @@
 #include "simulation-cuda.h"
+#include "cuda-helper.h"
 
 #include <iostream>
 #include <chrono>
@@ -8,49 +9,10 @@ using namespace std;
 
 #define MAX_PARTICLES 10
 
-#define CUDA_CHECK(call)\
-{\
-	const cudaError_t error = call;\
-	if (error != cudaSuccess)\
-	{\
-		std::cerr << "CUDA error occurred: " << cudaGetErrorString(error) << " at line " << __LINE__ << std::endl;\
-		exit(1);\
-	}\
-}
-
-#define CUDA_TIME(call, name) \
-{ \
-	cudaEvent_t start, end; \
-	cudaEventCreate(&start); \
-	cudaEventCreate(&end); \
-	cudaEventRecord(start); \
-	call; \
-	cudaEventRecord(end); \
-	cudaEventSynchronize(end); \
-	float time = 0; \
-	cudaEventElapsedTime(&time, start, end); \
-	if (times[name].size() > MAX_TIMES) times[name].pop_back(); \
-	times[name].insert(times[name].begin(), time); \
-	cudaEventDestroy(start); \
-	cudaEventDestroy(end); \
-}
-
-__device__ __forceinline__ int linear_grid_index(int x, int y, int z, const int grid_size) {
-	return x + y * grid_size + z * grid_size * grid_size;
-}
-
-__device__ int3 grid_index(int linear_index, const int grid_size) {
-	int z = linear_index / (grid_size * grid_size);
-	linear_index -= z * (grid_size * grid_size);
-	int y = linear_index / grid_size;
-	linear_index -= y * grid_size;
-	return make_int3(linear_index, y, z);
-}
-
-__device__ int compute_grid(particle p, float cell_size, int grid_size) {
-	int x = p.position.x / cell_size;
-	int y = p.position.y / cell_size;
-	int z = p.position.z / cell_size;
+__device__ __forceinline__ int compute_grid(const particle &particle, float cell_size, int grid_size) {
+	int x = particle.position.x / cell_size;
+	int y = particle.position.y / cell_size;
+	int z = particle.position.z / cell_size;
 	return linear_grid_index(x, y, z, grid_size);
 }
 
@@ -60,7 +22,7 @@ __global__ void bin_particles(particle *particles, int particle_count, int *cell
 
 	cell_ids[index] = compute_grid(particles[index], cell_size, grid_size);
 	particle_ids[index] = index;
-}	
+}
 
 __global__ void find_cell_ranges(int *cell_ids, int *particle_ids, int *cell_starts, int *cell_ends, int particle_count) {
 
@@ -109,17 +71,18 @@ __global__ void viscosity(particle *particles, int *cell_starts, int *cell_ends,
 					int particle_index = particle_ids_sorted[i];
 					if (particle_index > index) continue;
 
-					auto pos_diff = particles[particle_index].position - particles[index].position;
-					float q = glm::length(pos_diff) / h;
+					float3 pos_diff = float4to3(particles[particle_index].position - particles[index].position);
+					float q = length(pos_diff) / h;
 
 					if (q < 1) {
-						auto u = glm::dot((particles[index].velocity - particles[particle_index].velocity), pos_diff);
+						auto u = dot(float4to3(particles[index].velocity - particles[particle_index].velocity), pos_diff);
 						
 						if (u > 0) {
-							auto I = delta_time * (1.0f - q) * (sigma * u + beta * u * u) * glm::normalize(pos_diff);
+							normalize(pos_diff);
+							float3 I = delta_time * (1.0f - q) * (sigma * u + beta * u * u) * pos_diff;
 							I *= 0.5f;
-							particles[index].velocity -= I;
-							particles[particle_index].velocity += I;
+							particles[index].velocity -= float3to4(I);
+							particles[particle_index].velocity += float3to4(I);
 						}
 					}
 				}
@@ -132,8 +95,12 @@ __global__ void slow_down(particle *particles, int particle_count) {
 	if (index >= particle_count) return;
 
 	// slow down any particles which achieved unrealistic speeds
-	if (glm::length(particles[index].velocity) > 50.0f) {
-		particles[index].velocity = glm::normalize(particles[index].velocity) * 50.0f;
+	if (length(float4to3(particles[index].velocity)) > 50.0f) {
+		
+		// TODO fix me
+
+		// normalize(particles[index].velocity)
+		// particles[index].velocity =  * 50.0f;
 	}
 }
 
@@ -169,15 +136,15 @@ __device__ void dampen(particle &p, float grid_size) {
 	}
 }
 
-__global__ void pos_update(particle *particles, int particle_count, glm::vec3 *old_posis, float delta_time) {
+__global__ void pos_update(particle *particles, int particle_count, float4 *old_posis, float delta_time) {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	if (index >= particle_count) return;
 
 	old_posis[index] = particles[index].position;
 	particles[index].position += delta_time * particles[index].velocity;
-}	
+}
 
-__global__ void gpu_step_fast(particle *particles, int *cell_starts, int *cell_ends, int *particle_ids_sorted, float cell_size, int grid_size, int particle_count, float delta_time, float h, float k, float roh_0, float k_near, glm::vec3 *old_posis) {
+__global__ void gpu_step_first(const particle *particles, const int *cell_starts, const int *cell_ends, const int *particle_ids_sorted, float *rohs, float *roh_nears, float cell_size, int grid_size, int particle_count, float h) {
 
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	if (index >= particle_count) return;
@@ -206,7 +173,7 @@ __global__ void gpu_step_fast(particle *particles, int *cell_starts, int *cell_e
 					int particle_index = particle_ids_sorted[i];
 					if (particle_index == index) continue;
 					
-					float q = glm::length(particles[particle_index].position - particles[index].position) / h;
+					float q = length(float4to3(particles[particle_index].position - particles[index].position)) / h;
 
 					if (q < 1) {
 						roh += (1 - q) * (1 - q);
@@ -214,10 +181,22 @@ __global__ void gpu_step_fast(particle *particles, int *cell_starts, int *cell_e
 					}
 				}
 			}
+	
+	rohs[index] = roh;
+	roh_nears[index] = roh_near;
+}
 
-	float P = k * (roh - roh_0);
-	float P_near = k_near * roh_near;
-	glm::vec3 d_x = glm::vec3(0);
+__global__ void gpu_step_second(particle *particles, const int *cell_starts, const int *cell_ends, const int *particle_ids_sorted, const float *rohs, const float *roh_nears, float cell_size, int grid_size, int particle_count, float delta_time, float h, float k, float roh_0, float k_near) {
+
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+	if (index >= particle_count) return;
+
+	int linear_index = compute_grid(particles[index], cell_size, grid_size);
+	int3 current_index = grid_index(linear_index, grid_size);
+
+	float P = k * (rohs[index] - roh_0);
+	float P_near = k_near * roh_nears[index];
+	float3 d_x = float3 {0.0f, 0.0f, 0.0f};
 
 	for (int x = -1; x < 2; ++x)
 		for (int y = -1; y < 2; ++y)
@@ -236,27 +215,104 @@ __global__ void gpu_step_fast(particle *particles, int *cell_starts, int *cell_e
 					int particle_index = particle_ids_sorted[i];
 					if (particle_index == index) continue;
 
-					auto pos_diff = particles[particle_index].position - particles[index].position;
-					float q = glm::length(particles[particle_index].position - particles[index].position) / h;
+					float3 pos_diff = float4to3(particles[particle_index].position - particles[index].position);
+					float q = length(float4to3(particles[particle_index].position - particles[index].position)) / h;
 
 					if (q < 1) {
-						glm::vec3 D = delta_time * delta_time * (P * (1 - q) + P_near * (1 - q) * (1 - q)) * glm::normalize(pos_diff);
+						normalize(pos_diff);
+						float3 D = delta_time * delta_time * (P * (1 - q) + P_near * (1 - q) * (1 - q)) * pos_diff;
 						D *= 0.5f;
-						particles[particle_index].position += D;
+						particles[particle_index].position = particles[particle_index].position + float3to4(D);
 						d_x = d_x - D;
 					}
 				}
 			}
 
 	// compute next velocity and set positions
-	particles[index].position += d_x;
+	particles[index].position = particles[index].position + float3to4(d_x);
 }
 
-__global__ void update_velocity(particle *particles, int particle_count, glm::vec3 *old_posis, float delta_time) {
+__global__ void gpu_step_fast(particle *particles, int *cell_starts, int *cell_ends, int *particle_ids_sorted, float cell_size, int grid_size, int particle_count, float delta_time, float h, float k, float roh_0, float k_near, float4 *old_posis) {
+
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	if (index >= particle_count) return;
 
-	particles[index].velocity = (particles[index].position - old_posis[index]) / delta_time;
+	int linear_index = compute_grid(particles[index], cell_size, grid_size);
+	int3 current_index = grid_index(linear_index, grid_size);
+
+	// double density
+	float roh = 0;
+	float roh_near = 0;
+
+	for (int x = -1; x < 2; ++x)
+		for (int y = -1; y < 2; ++y)
+			for (int z = -1; z < 2; ++z) {
+
+				int3 current = make_int3(current_index.x + x, current_index.y + y, current_index.z + z);
+
+				if (current.x < 0 || current.x > grid_size - 1) continue;
+				if (current.y < 0 || current.y > grid_size - 1) continue;
+				if (current.z < 0 || current.z > grid_size - 1) continue;
+
+				int current_linear = linear_grid_index(current.x, current.y, current.z, grid_size);
+
+				for (int i = cell_starts[current_linear]; i < cell_ends[current_linear] && i < cell_starts[current_linear] + MAX_PARTICLES; ++i) {
+
+					int particle_index = particle_ids_sorted[i];
+					if (particle_index == index) continue;
+					
+					float q = length(float4to3(particles[particle_index].position - particles[index].position)) / h;
+
+					if (q < 1) {
+						roh += (1 - q) * (1 - q);
+						roh_near += (1 - q) * (1 - q) * (1 - q);
+					}
+				}
+			}
+
+	float P = k * (roh - roh_0);
+	float P_near = k_near * roh_near;
+	float3 d_x = float3 {0.0f, 0.0f, 0.0f};
+
+	for (int x = -1; x < 2; ++x)
+		for (int y = -1; y < 2; ++y)
+			for (int z = -1; z < 2; ++z) {
+
+				int3 current = make_int3(current_index.x + x, current_index.y + y, current_index.z + z);
+
+				if (current.x < 0 || current.x > grid_size - 1) continue;
+				if (current.y < 0 || current.y > grid_size - 1) continue;
+				if (current.z < 0 || current.z > grid_size - 1) continue;
+
+				int current_linear = linear_grid_index(current.x, current.y, current.z, grid_size);
+
+				for (int i = cell_starts[current_linear]; i < cell_ends[current_linear] && i < cell_starts[current_linear] + MAX_PARTICLES; ++i) {
+
+					int particle_index = particle_ids_sorted[i];
+					if (particle_index == index) continue;
+
+					float3 pos_diff = float4to3(particles[particle_index].position - particles[index].position);
+					float q = length(float4to3(particles[particle_index].position - particles[index].position)) / h;
+
+					if (q < 1) {
+						normalize(pos_diff);
+						float3 D = delta_time * delta_time * (P * (1 - q) + P_near * (1 - q) * (1 - q)) * pos_diff;
+						D *= 0.5f;
+						particles[particle_index].position = particles[particle_index].position + float3to4(D);
+						d_x = d_x - D;
+					}
+				}
+			}
+
+	// compute next velocity and set positions
+	particles[index].position = particles[index].position + float3to4(d_x);
+}
+
+__global__ void update_velocity(particle *particles, int particle_count, float4 *old_posis, float delta_time) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+	if (index >= particle_count) return;
+
+	particles[index].velocity = (particles[index].position - old_posis[index]) * (1 / delta_time);
 }
 
 __global__ void count_me(int *cell_starts, int *cell_ends, int particle_count) {
@@ -269,11 +325,11 @@ __global__ void count_me(int *cell_starts, int *cell_ends, int particle_count) {
 		printf("%d\n", count);
 }
 
-__global__ void apply_gravity(particle *particles, int particle_count, glm::vec3 gravity, float delta_time) {
+__global__ void apply_gravity(particle *particles, int particle_count, float3 gravity, float delta_time) {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	if (index >= particle_count) return;
 
-	particles[index].velocity += delta_time * gravity;
+	particles[index].velocity = particles[index].velocity + delta_time * float3to4(gravity);
 }
 
 __global__ void dampen_all(particle *particles, int particle_count, float grid_size) {
@@ -353,31 +409,31 @@ __global__ void create_springs(particle *particles, int particle_count, spring *
 	// }
 }
 
-__global__ void collisions(particle *particles, glm::vec3 *old_posis, int particle_count, float interaction_radius, float delta_time) {
+__global__ void collisions(particle *particles, float4 *old_posis, int particle_count, float interaction_radius, float delta_time) {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	if (index >= particle_count) return;
 
 	particle &current = particles[index];
 
 	float radius = 20;
-	glm::vec3 circle(100, 100, 100);
+	float3 circle {100.0f, 100.0f, 100.0f};
 	float my = 0.225f;
 
-	glm::vec3 n = circle - current.position;
-	float dist = glm::length(n) - radius;
+	float3 n = circle - float4to3(current.position);
+	float dist = length(n) - radius;
 
 	if (dist > interaction_radius) return;
 
-	n = glm::normalize(n);
-	glm::vec3 old = old_posis[index];
-	glm::vec3 v = current.position - old;
+	normalize(n);
+	float4 old = old_posis[index];
+	float3 v = float4to3(current.position - old);
 
-	glm::vec3 v_normal = glm::dot(v, n) * n;
-	glm::vec3 v_tangent = v - v_normal;
+	float3 v_normal = dot(v, n) * n;
+	float3 v_tangent = v - v_normal;
 
-	glm::vec3 I = v_normal - my * v_tangent;
+	float3 I = v_normal - my * v_tangent;
 
-	current.position -= delta_time * I;
+	current.position = current.position - delta_time * float3to4(I);
 }
 
 static int *cell_ids;
@@ -386,9 +442,11 @@ static int *cell_ids_sorted;
 static int *particle_ids_sorted;
 static int *cell_starts;
 static int *cell_ends;
-static glm::vec3 *old_posis;
+static float4 *old_posis;
 static void *temp_storage;
 static size_t temp_storage_bytes;
+static float *rohs;
+static float *roh_nears;
 
 void init(int count, int grid_size) {
 
@@ -402,7 +460,10 @@ void init(int count, int grid_size) {
 	CUDA_CHECK(cudaMalloc((void**)&cell_starts, grid_count * sizeof(int)))
 	CUDA_CHECK(cudaMalloc((void**)&cell_ends, grid_count * sizeof(int)))
 
-	CUDA_CHECK(cudaMalloc((void**)&old_posis, count * sizeof(glm::vec3)))
+	CUDA_CHECK(cudaMalloc((void**)&old_posis, count * sizeof(float4)))
+
+	CUDA_CHECK(cudaMalloc((void**)&rohs, count * sizeof(float)))
+	CUDA_CHECK(cudaMalloc((void**)&roh_nears, count * sizeof(float)))
 }
 
 void fin() {
@@ -413,10 +474,12 @@ void fin() {
 	CUDA_CHECK(cudaFree(cell_starts))
 	CUDA_CHECK(cudaFree(cell_ends))
 	CUDA_CHECK(cudaFree(old_posis))
+	CUDA_CHECK(cudaFree(rohs))
+	CUDA_CHECK(cudaFree(roh_nears))
 }
 
 void cuda_fast_step(particle *device_pointer, vector<particle> &particles, float cell_size, int grid_size, float delta_time, float h, 
-				float sigma, float beta, float k, float roh_0, float k_near, glm::vec3 gravity, std::map<std::string, std::vector<float>> &times) {
+				float sigma, float beta, float k, float roh_0, float k_near, float3 gravity, std::map<std::string, std::vector<float>> &times) {
 
 	int block_size = 256;
 	int num_blocks = (particles.size() + block_size - 1) / block_size;
@@ -436,7 +499,12 @@ void cuda_fast_step(particle *device_pointer, vector<particle> &particles, float
 	CUDA_TIME((viscosity<<<num_blocks, block_size>>>(device_pointer, cell_starts, cell_ends, particle_ids_sorted, particles.size(), cell_size, grid_size, delta_time, sigma, beta, h)), "viscosity");
 	CUDA_TIME((slow_down<<<num_blocks, block_size>>>(device_pointer, particles.size())), "slow down");
 	CUDA_TIME((pos_update<<<num_blocks, block_size>>>(device_pointer, particles.size(), old_posis, delta_time)), "pos update");
+	
 	CUDA_TIME((gpu_step_fast<<<num_blocks, block_size>>>(device_pointer, cell_starts, cell_ends, particle_ids_sorted, cell_size, grid_size, particles.size(), delta_time, h, k, roh_0, k_near, old_posis)), "step");
+
+	// CUDA_TIME((gpu_step_first<<<num_blocks, block_size>>>(device_pointer, cell_starts, cell_ends, particle_ids_sorted, rohs, roh_nears, cell_size, grid_size, particles.size(), h)), "step 1");
+	// CUDA_TIME((gpu_step_second<<<num_blocks, block_size>>>(device_pointer, cell_starts, cell_ends, particle_ids_sorted, rohs, roh_nears, cell_size, grid_size, particles.size(), delta_time, h, k, roh_0, k_near)), "step 2");
+
 	CUDA_TIME((collisions<<<num_blocks, block_size>>>(device_pointer, old_posis, particles.size(), h, delta_time)), "collisions");
 	CUDA_TIME((update_velocity<<<num_blocks, block_size>>>(device_pointer, particles.size(), old_posis, delta_time)), "update velocity");
 	CUDA_TIME((slow_down<<<num_blocks, block_size>>>(device_pointer, particles.size())), "slow");

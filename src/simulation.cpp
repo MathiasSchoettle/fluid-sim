@@ -30,11 +30,11 @@ void simulation::initialize() {
 	glBufferData(GL_ARRAY_BUFFER, (particles.size()) * sizeof(particle), particles.data(), GL_DYNAMIC_DRAW);
 
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(particle), 0);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 48, 0);
 	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(particle), (const void *)(3 * sizeof(float)));
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 48, (const void *) 16);
 	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(particle), (const void *)(6 * sizeof(float)));
+	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 48, (const void *) 32);
 }
 
 void simulation::draw() {
@@ -52,7 +52,7 @@ void simulation::step() {
 	particle *device_pointer;
 	cudaGraphicsResourceGetMappedPointer((void**)&device_pointer, &size, cuda_resource);
 
-	((cuda_fast_step(device_pointer, particles, particle_diameter, grid_size, delta_time, particle_diameter * 1.5f, sigma, beta, k, roh_0, k_near, gravity, times)));
+	((cuda_fast_step(device_pointer, particles, particle_diameter, grid_size, delta_time, particle_diameter * 1.5f, sigma, beta, k, roh_0, k_near, float3 {gravity.x, gravity.y, gravity.z}, times)));
 
 	cudaGraphicsUnregisterResource(cuda_resource);
 	cudaGraphicsUnmapResources(1, &cuda_resource, 0);
@@ -62,7 +62,7 @@ float get_rand() {
 	return static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
 }
 
-void add_circle(std::vector<particle> &particles, int radius, glm::vec3 pos, glm::vec3 color, float particle_diameter, float grid_size) {
+void add_circle(std::vector<particle> &particles, int radius, float4 pos, float4 color, float particle_diameter, float grid_size) {
 	float mult = 0.75 * particle_diameter;
 
 	for (int x = -radius; x < radius; ++x)
@@ -70,19 +70,14 @@ void add_circle(std::vector<particle> &particles, int radius, glm::vec3 pos, glm
 			for (int z = -radius; z < radius; ++z) {
 
 				particle p;
-				p.position = glm::vec3(
-					x * mult,
-					y * mult,
-					z * mult
-				);
+				p.position = float4 {x * mult + pos.x, y * mult + pos.y, z * mult + pos.z, 1.0f};
 
-				p.position += pos;
-			
-				if (glm::length(p.position - pos) > radius * mult) {
-					continue;
-				}
+				// float4 diff = p.position - pos;
 
-				p.velocity = glm::vec3(0);
+				// if (sqrt(diff.x*diff.x + diff.y*diff.y + diff.z*diff.z))
+				// 	continue;
+
+				p.velocity = float4 {0, 0, 0, 0};
 				p.color = color;
 				particles.push_back(p);
 			}
@@ -91,12 +86,12 @@ void add_circle(std::vector<particle> &particles, int radius, glm::vec3 pos, glm
 void simulation::set_data() {
 	particles.clear();
 
-	add_circle(particles, 20, glm::vec3(30, 55, 165), glm::vec3(0.6, 0.6, 0.6), particle_diameter, grid_size);
-	add_circle(particles, 20, glm::vec3(160, 30, 20), glm::vec3(0.6, 0.6, 0.6), particle_diameter, grid_size);
-	add_circle(particles, 20, glm::vec3(170, 35, 160), glm::vec3(0.6, 0.6, 0.6), particle_diameter, grid_size);
-	add_circle(particles, 20, glm::vec3(40, 70, 30), glm::vec3(0.6, 0.6, 0.6), particle_diameter, grid_size);
+	add_circle(particles, 20, float4 {30.f, 55.f, 165.f, 0.f}, float4 {0.6f, 0.6f, 0.6f, 1.0f}, particle_diameter, grid_size);
+	add_circle(particles, 20, float4 {160.f, 30.f, 20.f, 0.f}, float4 {0.6f, 0.6f, 0.6f, 1.0f}, particle_diameter, grid_size);
+	add_circle(particles, 20, float4 {170.f, 35.f, 160.f, 0.f}, float4 {0.2f, 0.9f, 0.9f, 1.0f}, particle_diameter, grid_size);
+	add_circle(particles, 20, float4 {40.f, 70.f, 30.f, 0.f}, float4 {0.2f, 0.4f, 0.3f, 1.0f}, particle_diameter, grid_size);
 
-	add_circle(particles, 25, glm::vec3(110, 170, 100), glm::vec3(0.2, 0.4, 0.9), particle_diameter, grid_size);
+	add_circle(particles, 25, float4{110.f, 170.f, 100.f, 0.f}, float4{0.2f, 0.2f, 0.2f, 1.0f}, particle_diameter, grid_size);
 
 	// shuffle so updates are more random
 	auto rng = std::default_random_engine {};
