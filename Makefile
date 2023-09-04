@@ -8,7 +8,7 @@ NVCCFLAGS = -arch=sm_89 -Xcudafe --diag_suppress=esa_on_defaulted_function_ignor
 LDLIBS = -lbigduckgl -limgui -lGLEW -lglfw -lGL -lassimp
 
 # Source files
-CPP_SOURCES = src/main.cpp src/simulation.cpp src/quad.cpp src/box.cpp
+CPP_SOURCES = src/main.cpp src/simulation.cpp src/quad.cpp
 CUDA_SOURCES = src/simulation-cuda.cu
 
 # Object files

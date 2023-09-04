@@ -15,7 +15,6 @@
 
 #include "simulation.h"
 #include "quad.h"
-#include "box.h"
 
 using namespace std;
 using namespace std::chrono;
@@ -23,7 +22,6 @@ using namespace std::chrono;
 int width = 1920, height = 1080;
 float n = 0.1, f = 400;
 float EPSILON_MULT = 0.5;
-bool draw_box = true;
 int grid_size = 200;
 
 GLuint g_buffer;
@@ -70,7 +68,6 @@ int main(int argc, char** argv) {
 	params.gl_major = 4;
 	params.gl_minor = 4;
 	params.title = "HSP";
-	params.font_ttf_filename = "render-data/fonts/DroidSansMono.ttf";
 	params.font_size_pixels = 15;
 	params.resizable = false;
 	params.width = width;
@@ -97,11 +94,9 @@ int main(int argc, char** argv) {
 	shader_ptr shader_depth = make_shader("depth", "shaders/default.vert", "shaders/depth.frag");
 	shader_ptr shader_attribs = make_shader("attribs", "shaders/default.vert", "shaders/default.frag");
 	shader_ptr shader_quad = make_shader("quad", "shaders/quad.vert", "shaders/quad.frag");
-	shader_ptr shader_box = make_shader("box", "shaders/box.vert", "shaders/box.frag");
 
 	simulation sim(grid_size);
 	quad quad;
-	box box(grid_size);
 
 	glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
 	glPointParameteri(GL_POINT_SPRITE_COORD_ORIGIN, GL_LOWER_LEFT);
@@ -123,8 +118,6 @@ int main(int argc, char** argv) {
 		if (ImGui::Button(sim.pause ? "Resume" : "Pause")) {
 			sim.pause = !sim.pause;
 		}
-
-		ImGui::Checkbox("draw box", &draw_box);
 
 		ImGui::Text("Pos: (%f, %f %f)", cam->pos.x, cam->pos.y, cam->pos.z);
 		ImGui::Text("Dir: (%f, %f %f)", cam->dir.x, cam->dir.y, cam->dir.z);
@@ -195,13 +188,7 @@ int main(int argc, char** argv) {
 
 		sim.draw();
 
-		shader_box->bind();
-		shader_box->uniform("view", cam->view);
-		shader_box->uniform("proj", cam->proj);
-
 		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-
-		if (draw_box) box.draw();
 
 		shader_attribs->bind();
 		shader_attribs->uniform("view", cam->view);
