@@ -17,32 +17,36 @@ float specular_strength = 2;
 
 out vec3 out_color;
 
-float linearDepth(float depthSample)
+float depth_sample(float linear_depth)
 {
-	depthSample = 2.0 * depthSample - 1.0;
-	float zLinear = 2.0 * n * f / (f + n - depthSample * (f - n));
-	return zLinear;
+	float non_linear_depth = (f + n - 2.0 * n * f / linear_depth) / (f - n);
+	return (non_linear_depth + 1.0) / 2.0;
+}
+
+float linear_depth(float depth)
+{
+	depth = 2.0 * depth - 1.0;
+	return 2.0 * n * f / (f + n - depth * (f - n));
 }
 
 void main()
 {
 	vec4 col = texture(g_col, tex_coords);
 	vec3 norm = texture(g_norm, tex_coords).rgb;
-	vec3 depth = texture(g_depth, tex_coords).rgb;
-
-	vec3 normal = normalize(norm);
-	vec3 normal_vis = (normal + vec3(1.0, 1.0, 1.0)) / 2.0;
+	vec4 depth = texture(g_depth, tex_coords);
 
 	vec3 ambient = ambient_strength * light_color;
-	vec3 diffuse = max(-dot(normal, light_dir), 0.0) * light_color;
-	vec3 ref = reflect(light_dir, normal);
+	vec3 diffuse = max(-dot(norm, light_dir), 0.0) * light_color;
+	vec3 ref = reflect(light_dir, norm);
 
 	float spec = pow(max(ref.z, 0.0), 64);
 	vec3 specular = specular_strength * spec * light_color;
 
-	vec3 color_w = col.xyz / col.a;
+	vec3 color_w = col.xyz;
 	vec3 res = (diffuse + ambient + specular) * color_w;
 
-	out_color = normal_vis;
+	out_color = color_w;
+	out_color = norm;
+	out_color = vec3(depth.w);
 	out_color = res;
 }

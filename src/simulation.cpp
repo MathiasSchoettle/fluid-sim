@@ -86,12 +86,12 @@ void add_circle(std::vector<particle> &particles, int radius, float4 pos, glm::v
 void simulation::set_data() {
 	particles.clear();
 
-	add_circle(particles, 25, float4 {30.f, 55.f, 165.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
-	add_circle(particles, 25, float4 {160.f, 30.f, 20.f, 0.f}, glm::vec3(1, 144, 105), particle_diameter, grid_size);
-	add_circle(particles, 25, float4 {170.f, 35.f, 160.f, 0.f}, glm::vec3(1, 144, 105), particle_diameter, grid_size);
-	add_circle(particles, 25, float4 {40.f, 70.f, 30.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
+	add_circle(particles, 10, float4 {30.f, 55.f, 165.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
+	add_circle(particles, 10, float4 {160.f, 30.f, 20.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
+	// add_circle(particles, 10, float4 {170.f, 35.f, 160.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
+	// add_circle(particles, 10, float4 {40.f, 70.f, 30.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
 
-	add_circle(particles, 25, float4{110.f, 170.f, 100.f, 0.f}, glm::vec3(123, 220, 230), particle_diameter, grid_size);
+	// add_circle(particles, 25, float4{110.f, 170.f, 100.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
 
 	// shuffle so updates are more random
 	auto rng = std::default_random_engine {};

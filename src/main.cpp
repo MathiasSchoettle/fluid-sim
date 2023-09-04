@@ -23,11 +23,11 @@ using namespace std::chrono;
 int width = 1920, height = 1080;
 float n = 0.1, f = 400;
 float EPSILON_MULT = 0.5;
-bool draw_box = true;
+bool draw_box = false;
 int grid_size = 200;
 
 GLuint g_buffer;
-GLuint g_norm, g_col, g_depth;
+GLuint g_norm, g_col, g_depth, g_depth_col, g_depth_final;
 
 void setup_g_buffer() {
 
@@ -55,8 +55,22 @@ void setup_g_buffer() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, g_col, 0);
 
-	unsigned int attachments[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
-	glDrawBuffers(2, attachments);
+	glGenTextures(1, &g_depth_col);
+	glBindTexture(GL_TEXTURE_2D, g_depth_col);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, g_depth_col, 0);
+
+	glGenTextures(1, &g_depth_final);
+	glBindTexture(GL_TEXTURE_2D, g_depth_final);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, g_depth_final, 0);
+
+	unsigned int attachments[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3 };
+	glDrawBuffers(4, attachments);
 
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 		std::cout << "Framebuffer not complete!" << std::endl;
@@ -91,12 +105,14 @@ int main(int argc, char** argv) {
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
 
-	glEnable(GL_BLEND);
 	glBlendFunc(GL_ONE, GL_ONE);
 
 	shader_ptr shader_depth = make_shader("depth", "shaders/default.vert", "shaders/depth.frag");
-	shader_ptr shader_attribs = make_shader("attribs", "shaders/default.vert", "shaders/default.frag");
+
+	shader_ptr shader_quad_depth = make_shader("quad_depth", "shaders/quad.vert", "shaders/quad_depth.frag");
+	shader_ptr shader_quad_normal = make_shader("quad_normal", "shaders/quad.vert", "shaders/quad_normal.frag");
 	shader_ptr shader_quad = make_shader("quad", "shaders/quad.vert", "shaders/quad.frag");
+
 	shader_ptr shader_box = make_shader("box", "shaders/box.vert", "shaders/box.frag");
 
 	simulation sim(grid_size);
@@ -105,6 +121,8 @@ int main(int argc, char** argv) {
 
 	glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
 	glPointParameteri(GL_POINT_SPRITE_COORD_ORIGIN, GL_LOWER_LEFT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
 	setup_g_buffer();
 
@@ -175,6 +193,15 @@ int main(int argc, char** argv) {
 
 		float sprite_size = sim.particle_diameter * sim.particle_render_factor;
 
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, g_norm);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, g_col);
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, g_depth_col);
+		glActiveTexture(GL_TEXTURE3);
+		glBindTexture(GL_TEXTURE_2D, g_depth_final);
+
 		shader_depth->bind();
 		shader_depth->uniform("view", cam->view);
 		shader_depth->uniform("proj", cam->proj);
@@ -186,61 +213,63 @@ int main(int argc, char** argv) {
 
 		glBindFramebuffer(GL_FRAMEBUFFER, g_buffer);
 
-		glDepthMask(GL_TRUE);
-		glEnable(GL_DEPTH_TEST);
-		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-		glClearDepth(1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+		unsigned int attachments[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3 };
+		glDrawBuffers(4, attachments);
 
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glEnable(GL_DEPTH_TEST);
+
+		unsigned int attachments1[] = { GL_NONE, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_NONE };
+		glDrawBuffers(4, attachments1);
+		
 		sim.draw();
 
 		shader_box->bind();
 		shader_box->uniform("view", cam->view);
 		shader_box->uniform("proj", cam->proj);
-
-		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-
 		if (draw_box) box.draw();
 
-		shader_attribs->bind();
-		shader_attribs->uniform("view", cam->view);
-		shader_attribs->uniform("proj", cam->proj);
-		shader_attribs->uniform("screen_size", Context::resolution());
-		shader_attribs->uniform("sprite_size", sprite_size);
-		shader_attribs->uniform("n", cam->near);
-		shader_attribs->uniform("f", cam->far);
-		shader_attribs->uniform("eps", sim.particle_diameter * EPSILON_MULT);
-
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, g_depth);
-		glDepthMask(GL_FALSE);
-		glEnable(GL_BLEND);
 		glDisable(GL_DEPTH_TEST);
+
+		shader_quad_depth->bind();
+		shader_quad_depth->uniform("g_depth", 2);
+		shader_quad_depth->uniform("n", cam->near);
+		shader_quad_depth->uniform("f", cam->far);
+
+		unsigned int attachments2[] = { GL_NONE, GL_NONE, GL_NONE, GL_COLOR_ATTACHMENT3 };
+		glDrawBuffers(4, attachments2);
+
+		quad.draw();
 		
-		sim.draw();
+		shader_quad_normal->bind();
+		shader_quad_normal->uniform("g_depth", 3);
+		shader_quad_normal->uniform("n", cam->near);
+		shader_quad_normal->uniform("f", cam->far);
+		shader_quad_normal->uniform("proj", cam->proj);
+
+		unsigned int attachments3[] = { GL_COLOR_ATTACHMENT0, GL_NONE, GL_NONE, GL_NONE };
+		glDrawBuffers(4, attachments3);
+		
+		quad.draw();
 
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		shader_quad->bind();
+		auto light = glm::normalize(glm::vec3(0.5f, -1.0f, 0.4f));
+		auto ld_view = cam->view * glm::vec4(light, 0.0);
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, g_norm);
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, g_col);
 		glActiveTexture(GL_TEXTURE2);
-		glBindTexture(GL_TEXTURE_2D, g_depth);
+		glBindTexture(GL_TEXTURE_2D, g_depth_final);
 
-		glDisable(GL_BLEND);
-
-		auto light = glm::normalize(glm::vec3(0.5f, -1.0f, 0.4f));
-		auto ld_view = cam->view * glm::vec4(light, 0.0);
-
+		shader_quad->bind();
 		shader_quad->uniform("view", cam->view);
 		shader_quad->uniform("g_norm", 0);
 		shader_quad->uniform("g_col", 1);
-		shader_quad->uniform("g_depth", 2);
+		shader_quad->uniform("g_depth", 3);
 		shader_quad->uniform("light_dir", glm::vec3(ld_view));
 		shader_quad->uniform("n", cam->near);
 		shader_quad->uniform("f", cam->far);

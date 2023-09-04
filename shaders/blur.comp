@@ -1,0 +1,16 @@
+#version 430
+layout(local_size_x = 1, local_size_y = 1) in;
+layout(rgba32f, binding = 0) uniform image2D depth;
+layout(rgba32f, binding = 1) uniform image2D depth_to;
+
+void main() {
+	vec3 d = vec3(0);
+
+	for (int x = -4; x <= 4; ++x) {
+		for (int y = -4; y <= 4; ++y) {
+			d += imageLoad(depth, tc + ivec2(x, y)).rgb * 0.012345679;
+		}
+	}
+
+	if (length(d) > 0) imageStore(depth_to, tc, vec4(d, 1) * 0.04);
+}
