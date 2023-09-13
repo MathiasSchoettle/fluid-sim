@@ -85,14 +85,6 @@ int main(int argc, char** argv) {
 	cam->make_current();
 	Camera::default_camera_movement_speed = 0.02;
 
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS);
-
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_ONE, GL_ONE);
-
-	shader_ptr shader_depth = make_shader("depth", "shaders/default.vert", "shaders/depth.frag");
-	shader_ptr shader_attribs = make_shader("attribs", "shaders/default.vert", "shaders/default.frag");
 	shader_ptr shader_quad = make_shader("quad", "shaders/quad.vert", "shaders/quad.frag");
 
 	simulation sim(grid_size);
@@ -106,6 +98,7 @@ int main(int argc, char** argv) {
 	glfwSwapInterval(0);
 
 	static int count = 0;
+	const float sprite_size = sim.particle_diameter * sim.particle_render_factor;
 
 	while (Context::running()) {
 		Camera::default_input_handler(Context::frame_time());
@@ -124,7 +117,7 @@ int main(int argc, char** argv) {
 
 		ImGui::Separator();
 		float sum = 0;
-		for (auto [name, time] : sim.times) {
+		for (const auto [name, time] : sim.times) {
 			float current = time[time.size() - 1];
 			sum += current;
 			ImGui::TextColored((current > 4 ? ImVec4(1, 0, 0, 1) : ImVec4(1, 1, 1, 1)), "%s: %f", name.c_str(), current);
@@ -166,51 +159,16 @@ int main(int argc, char** argv) {
 
 		sim.step();
 
-		float sprite_size = sim.particle_diameter * sim.particle_render_factor;
-
-		shader_depth->bind();
-		shader_depth->uniform("view", cam->view);
-		shader_depth->uniform("proj", cam->proj);
-		shader_depth->uniform("screen_size", Context::resolution());
-		shader_depth->uniform("sprite_size", sprite_size);
-		shader_depth->uniform("n", cam->near);
-		shader_depth->uniform("f", cam->far);
-		shader_depth->uniform("eps", sim.particle_diameter * EPSILON_MULT);
-
 		glBindFramebuffer(GL_FRAMEBUFFER, g_buffer);
 
-		glDepthMask(GL_TRUE);
-		glEnable(GL_DEPTH_TEST);
 		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 		glClearDepth(1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-
-		sim.draw();
-
-		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-
-		shader_attribs->bind();
-		shader_attribs->uniform("view", cam->view);
-		shader_attribs->uniform("proj", cam->proj);
-		shader_attribs->uniform("screen_size", Context::resolution());
-		shader_attribs->uniform("sprite_size", sprite_size);
-		shader_attribs->uniform("n", cam->near);
-		shader_attribs->uniform("f", cam->far);
-		shader_attribs->uniform("eps", sim.particle_diameter * EPSILON_MULT);
-
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, g_depth);
-		glDepthMask(GL_FALSE);
-		glEnable(GL_BLEND);
-		glDisable(GL_DEPTH_TEST);
-		
-		sim.draw();
 
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glClear(GL_COLOR_BUFFER_BIT);
+		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		shader_quad->bind();
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, g_norm);
@@ -219,11 +177,10 @@ int main(int argc, char** argv) {
 		glActiveTexture(GL_TEXTURE2);
 		glBindTexture(GL_TEXTURE_2D, g_depth);
 
-		glDisable(GL_BLEND);
-
 		auto light = glm::normalize(glm::vec3(0.5f, -1.0f, 0.4f));
 		auto ld_view = cam->view * glm::vec4(light, 0.0);
-
+		
+		shader_quad->bind();
 		shader_quad->uniform("view", cam->view);
 		shader_quad->uniform("g_norm", 0);
 		shader_quad->uniform("g_col", 1);
