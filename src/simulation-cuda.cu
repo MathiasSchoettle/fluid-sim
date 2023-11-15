@@ -108,7 +108,7 @@ __global__ void slow_down(particle *particles, int particle_count) {
 }
 
 __device__ void dampen(particle &p, float grid_size) {
-	float damping = -0.3f;
+	float damping = -0.9f;
 	float epsilon = 0.0001f;
 
 	if (p.position.x - epsilon < 0.0f) {

@@ -38,7 +38,7 @@ public:
 	float particle_diameter = 1.0f;
 	float particle_render_factor = 1.5f;
 	float delta_time = 0.025f;
-	glm::vec3 gravity = glm::vec3(0, -0.25f, 0);
+	glm::vec3 gravity = glm::vec3(0, -0.55f, 0);
 	int particle_count;
 	// pressure params
 	float k = 0.4, k_near = 40.0, roh_0 = 20.0;
@@ -55,6 +55,7 @@ public:
 	~simulation();
 	void initialize();
 	void set_data();
+	void reset();
 	void draw();
 	void step();
 };

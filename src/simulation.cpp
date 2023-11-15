@@ -35,6 +35,8 @@ void simulation::initialize() {
 	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 48, (const void *) 16);
 	glEnableVertexAttribArray(2);
 	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 48, (const void *) 32);
+
+	glBindVertexArray(0);
 }
 
 void simulation::draw() {
@@ -86,17 +88,21 @@ void add_circle(std::vector<particle> &particles, int radius, float4 pos, glm::v
 void simulation::set_data() {
 	particles.clear();
 
-	add_circle(particles, 25, float4 {30.f, 55.f, 165.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
-	add_circle(particles, 25, float4 {160.f, 30.f, 20.f, 0.f}, glm::vec3(1, 144, 105), particle_diameter, grid_size);
-	add_circle(particles, 25, float4 {170.f, 35.f, 160.f, 0.f}, glm::vec3(1, 144, 105), particle_diameter, grid_size);
-	add_circle(particles, 25, float4 {40.f, 70.f, 30.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
+	// add_circle(particles, 25, float4 {30.f, 55.f, 165.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
+	// add_circle(particles, 25, float4 {160.f, 30.f, 20.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
+	// add_circle(particles, 25, float4 {170.f, 35.f, 160.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
+	// add_circle(particles, 25, float4 {40.f, 70.f, 30.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
 
-	add_circle(particles, 25, float4{110.f, 170.f, 100.f, 0.f}, glm::vec3(123, 220, 230), particle_diameter, grid_size);
+	add_circle(particles, 25, float4{110.f, 90.f, 100.f, 0.f}, glm::vec3(254, 125, 25), particle_diameter, grid_size);
 
 	// shuffle so updates are more random
 	auto rng = std::default_random_engine {};
 	std::shuffle(std::begin(particles), std::end(particles), rng);
 	
 	particle_count = particles.size();
-	glNamedBufferSubData(vbo, 0, (particles.size()) * sizeof(particle), particles.data());
+}
+
+void simulation::reset() {
+	set_data();
+	glNamedBufferData(vbo, (particles.size()) * sizeof(particle), particles.data(), GL_DYNAMIC_DRAW);
 }
