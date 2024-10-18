@@ -2,4 +2,4 @@ Incredibly unpolished implementation of a fluid sim based on this paper: [Partic
 
 Simulated using CUDA kernels and rendered with OpenGL.
 
-![screenshot](screenshot.png)
+![screenshot](simu_full.png)
